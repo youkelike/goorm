@@ -69,7 +69,6 @@ func (p Predicate) expr() {
 
 }
 
-// 这是一个标记接口，接口方法里面不需要任何实现
 type Expression interface {
 	expr()
 }
