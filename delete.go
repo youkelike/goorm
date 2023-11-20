@@ -3,7 +3,7 @@ package orm
 import (
 	"strings"
 
-	"gitee.com/youkelike/go1/work/hw05/orm/internal/errs"
+	"gitee.com/youkelike/orm/internal/errs"
 )
 
 type Deletor[T any] struct {

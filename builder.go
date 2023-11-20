@@ -8,7 +8,7 @@ import (
 
 type builder struct {
 	sb    strings.Builder
-	model *model
+	model *Model
 	args  []any
 }
 
@@ -58,7 +58,7 @@ func (d *builder) buildExpression(expr Expression) error {
 			d.sb.WriteString(")")
 		}
 	case Column:
-		fd, ok := d.model.fields[exp.name]
+		fd, ok := d.model.fieldMap[exp.name]
 		if !ok {
 			return errs.NewUnknownField(exp.name)
 		}

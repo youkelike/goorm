@@ -5,7 +5,7 @@ import (
 	"reflect"
 	"testing"
 
-	"gitee.com/youkelike/go1/work/hw05/orm/internal/errs"
+	"gitee.com/youkelike/orm/internal/errs"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

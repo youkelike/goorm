@@ -4,7 +4,7 @@ import (
 	"reflect"
 	"testing"
 
-	"gitee.com/youkelike/go1/work/hw04/orm/reflect/types"
+	"gitee.com/youkelike/orm/reflect/types"
 	"github.com/stretchr/testify/assert"
 )
 

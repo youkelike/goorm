@@ -2,7 +2,10 @@ module gitee.com/youkelike/orm
 
 go 1.20
 
-require github.com/stretchr/testify v1.8.4
+require (
+	github.com/DATA-DOG/go-sqlmock v1.5.0
+	github.com/stretchr/testify v1.8.4
+)
 
 require (
 	github.com/davecgh/go-spew v1.1.1 // indirect
