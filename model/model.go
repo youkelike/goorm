@@ -45,7 +45,6 @@ type TableName interface {
 
 type ModelOption func(*Model) error
 
-// 编程的方式改变表名
 func WithTableName(TableName string) ModelOption {
 	return func(m *Model) error {
 		m.TableName = TableName
@@ -53,7 +52,6 @@ func WithTableName(TableName string) ModelOption {
 	}
 }
 
-// 编程的方式改变列名
 func WithColumnName(Field, colname string) ModelOption {
 	return func(m *Model) error {
 		fd, ok := m.FieldMap[Field]
@@ -65,7 +63,6 @@ func WithColumnName(Field, colname string) ModelOption {
 	}
 }
 
-// 主要用于集中管理、注册解析好的模型
 type registry struct {
 	models sync.Map
 }
@@ -104,8 +101,6 @@ func (r *registry) Get(val any) (*Model, error) {
 // 	return m, nil
 // }
 
-// 对于表名的解析顺序：结构体名、表名接口、表名 option
-// 对于表中列名的解析顺序：字段名、字段 tag、字段名 option
 func (r *registry) Register(entity any, opts ...ModelOption) (*Model, error) {
 	typ := reflect.TypeOf(entity)
 	for typ.Kind() == reflect.Pointer {
@@ -169,7 +164,6 @@ func (r *registry) Register(entity any, opts ...ModelOption) (*Model, error) {
 	return m, nil
 }
 
-// tag 是这个格式的：`orm:"column=id,xx=xx" xxx:"xx"`
 func (r *registry) parseTag(tag reflect.StructTag) (map[string]string, error) {
 	ormTag, ok := tag.Lookup("orm")
 	if !ok {

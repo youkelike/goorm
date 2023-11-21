@@ -47,9 +47,7 @@ func (left Predicate) Or(right Predicate) Predicate {
 	}
 }
 
-func (p Predicate) expr() {
-
-}
+func (p Predicate) expr() {}
 
 type value struct {
 	val any

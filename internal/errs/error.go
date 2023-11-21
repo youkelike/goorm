@@ -32,3 +32,7 @@ func NewInvalidTagContent(tag string) error {
 func NewUnsupportedAssignable(expr any) error {
 	return fmt.Errorf("orm: 不支持的赋值表达式类型 %v", expr)
 }
+
+func NewErrFailedToRollback(bizErr, rbErr error, panicked bool) error {
+	return fmt.Errorf("orm: 事务闭包回滚失败，业务错误：%w，回滚错误：%s，是否panic：%t", bizErr, rbErr, panicked)
+}

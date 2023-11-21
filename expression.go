@@ -16,10 +16,8 @@ func Raw(expr string, args ...any) RawExpr {
 	}
 }
 
-// 标识在 select 子句可以用
 func (r RawExpr) selectable() {}
 
-// 标识在 where 子句可以用
 func (r RawExpr) expr() {}
 
 func (r RawExpr) AsPredicate() Predicate {

@@ -1,18 +1,89 @@
 package orm
 
 import (
+	"context"
 	"database/sql"
+	"database/sql/driver"
+	"log"
 
+	"gitee.com/youkelike/orm/internal/errs"
 	"gitee.com/youkelike/orm/internal/valuer"
 	model "gitee.com/youkelike/orm/model"
 )
 
-// DB 是连接框架和 sql.DB 包的结合点
+// 主要用于集中管理、注册解析好的模型
 type DB struct {
-	r       model.Registry
-	db      *sql.DB
-	creator valuer.Creator
-	dialect Dialect
+	// r       model.Registry
+	// creator valuer.Creator
+	// dialect Dialect
+	core
+
+	db *sql.DB
+}
+
+func (db *DB) getCore() core {
+	return db.core
+}
+
+func (db *DB) DoTx(ctx context.Context,
+	fn func(ctx context.Context, tx *Tx) error,
+	opts *sql.TxOptions) (err error) {
+	tx, err := db.BeginTx(ctx, opts)
+	if err != nil {
+		return err
+	}
+	panicked := true
+	defer func() {
+		if panicked || err != nil {
+			e := tx.Rollback()
+			err = errs.NewErrFailedToRollback(err, e, panicked)
+		} else {
+			err = tx.Commit()
+		}
+	}()
+	err = fn(ctx, tx)
+	panicked = false
+	return err
+}
+
+func (db *DB) BeginTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error) {
+	tx, err := db.db.BeginTx(ctx, opts)
+	if err != nil {
+		return nil, err
+	}
+	return &Tx{tx: tx, db: db}, nil
+}
+
+// type txKey struct{}
+// func (db *DB) BeginTxV2(ctx context.Context, opts *sql.TxOptions) (context.Context, *Tx, error) {
+// 	val := ctx.Value(txKey{})
+// 	tx, ok := val.(*Tx)
+// 	if ok && !tx.done {
+// 		return ctx, tx, nil
+// 	}
+// 	tx, err := db.BeginTx(ctx, opts)
+// 	if err != nil {
+// 		return nil, nil, err
+// 	}
+// ctx = context.WithValue(ctx, txKey{}, tx)
+// 	return ctx, tx, nil
+// }
+
+func (db *DB) queryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error) {
+	return db.db.QueryContext(ctx, query, args...)
+}
+
+func (db *DB) execContext(ctx context.Context, query string, args ...any) (sql.Result, error) {
+	return db.db.ExecContext(ctx, query, args...)
+}
+
+func (db *DB) Wait() error {
+	err := db.db.Ping()
+	for err == driver.ErrBadConn {
+		log.Println("数据库启动中。。。")
+		err = db.db.Ping()
+	}
+	return nil
 }
 
 type DBOption func(*DB)
@@ -37,14 +108,12 @@ func MustOpen(driver string, dataSourceName string, opts ...DBOption) *DB {
 // 拎出这个方法在测试时很有用
 func OpenDB(db *sql.DB, opts ...DBOption) (*DB, error) {
 	res := &DB{
+		core: core{
+			r:       model.NewRegistry(),
+			creator: valuer.NewUnsafeValue,
+			dialect: DialectMySQL,
+		},
 		db: db,
-		// 这里出现了 3 种不同的接口使用方法：
-		// 1、使用一个构造方法，返回一个实现了接口的结构体
-		r: model.NewRegistry(),
-		// 2、用一个包变量保存实现了接口的结构体，直接引用这个包变量
-		dialect: DialectMySQL,
-		// 3、类似 build 模式，不直接用接口，而是用一个方法类型，只有在后续调用方法才会返回一个实现了接口的结构体
-		creator: valuer.NewUnsafeValue,
 	}
 	for _, op := range opts {
 		op(res)
@@ -67,5 +136,11 @@ func DBWithRegistry(registry model.Registry) DBOption {
 func DBWithDialect(dialect Dialect) DBOption {
 	return func(d *DB) {
 		d.dialect = dialect
+	}
+}
+
+func DBWithMiddlewares(mdls ...Middleware) DBOption {
+	return func(d *DB) {
+		d.mdls = mdls
 	}
 }

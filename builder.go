@@ -4,16 +4,17 @@ import (
 	"strings"
 
 	"gitee.com/youkelike/orm/internal/errs"
-	"gitee.com/youkelike/orm/model"
 )
 
 type builder struct {
-	sb    strings.Builder
-	args  []any
-	model *model.Model
+	// model *model.Model
+	// dialect Dialect
+	core
 
-	dialect Dialect
-	quoter  byte
+	sb   strings.Builder
+	args []any
+
+	quoter byte
 }
 
 func (b *builder) quote(name string) {
@@ -23,13 +24,6 @@ func (b *builder) quote(name string) {
 }
 
 func (b *builder) buildColumn(c Column) error {
-	// fd, ok := b.model.FieldMap[name]
-	// if !ok {
-	// 	return errs.NewUnknownField(name)
-	// }
-	// b.quote(fd.ColName)
-	// return nil
-
 	fd, ok := b.model.FieldMap[c.name]
 	if !ok {
 		return errs.NewUnknownField(c.name)

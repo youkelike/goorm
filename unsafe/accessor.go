@@ -14,7 +14,6 @@ type UnsafeAccessor struct {
 }
 
 func NewUnsafeAccessor(entity any) *UnsafeAccessor {
-	// 反射要结合 reflect，通过它拿到对象的起始地址和字段的偏移量、数据类型
 	typ := reflect.TypeOf(entity)
 	typ = typ.Elem()
 	numField := typ.NumField()
@@ -28,8 +27,7 @@ func NewUnsafeAccessor(entity any) *UnsafeAccessor {
 	}
 	val := reflect.ValueOf(entity)
 	return &UnsafeAccessor{
-		fields: fields,
-		// 对象的起始地址
+		fields:  fields,
 		address: val.UnsafePointer(),
 	}
 }
@@ -49,7 +47,6 @@ func (a *UnsafeAccessor) SetField(field string, val any) error {
 	if !ok {
 		return errors.New("非法字段")
 	}
-	// 地址运算的结果最好转换成 unsafe.Pointer，因为垃圾回收有可能改变对象的地址，但 unsafe.Pointer 始终指向目标对象
 	fdAddress := unsafe.Pointer(uintptr(a.address) + fd.Offset)
 	// *(*int)(fdAddress) = val.(int)
 	reflect.NewAt(fd.Typ, fdAddress).Elem().Set(reflect.ValueOf(val))

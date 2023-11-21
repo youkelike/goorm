@@ -2,18 +2,20 @@ package orm
 
 import (
 	"context"
+	"database/sql"
+	"reflect"
 
 	"gitee.com/youkelike/orm/internal/errs"
 	"gitee.com/youkelike/orm/model"
 )
 
-type Upsert struct {
-	assigns         []Assignable
+type UpsertBuilder[T any] struct {
+	i               *Inserter[T]
 	conflictColumns []string
 }
 
-type UpsertBuilder[T any] struct {
-	i               *Inserter[T]
+type Upsert struct {
+	assigns         []Assignable
 	conflictColumns []string
 }
 
@@ -32,20 +34,23 @@ type Assignable interface {
 }
 
 type Inserter[T any] struct {
+	// db      *DB
 	builder
 	columns []string
 	values  []*T
-	db      *DB
 	upsert  *Upsert
+
+	sess Session
 }
 
-func NewInserter[T any](db *DB) *Inserter[T] {
+func NewInserter[T any](sess Session) *Inserter[T] {
+	c := sess.getCore()
 	return &Inserter[T]{
 		builder: builder{
-			dialect: db.dialect,
-			quoter:  db.dialect.quoter(),
+			core:   c,
+			quoter: c.dialect.quoter(),
 		},
-		db: db,
+		sess: sess,
 	}
 }
 
@@ -71,21 +76,23 @@ func (i *Inserter[T]) Build() (*Query, error) {
 	}
 
 	i.sb.WriteString("INSERT INTO ")
-	m, err := i.db.r.Get(i.values[0])
-	if err != nil {
-		return nil, err
+	if i.model == nil {
+		var err error
+		i.model, err = i.r.Get(i.values[0])
+		if err != nil {
+			return nil, err
+		}
 	}
-	i.model = m
 
-	i.sb.WriteString(m.TableName)
+	i.sb.WriteString(i.model.TableName)
 	// i.quote(m.TableName)
 	i.sb.WriteString(" (")
 
-	fields := m.Fields
+	fields := i.model.Fields
 	if len(i.columns) > 0 {
 		fields = make([]*model.Field, 0, len(i.columns))
 		for _, fd := range i.columns {
-			fdMeta, ok := m.FieldMap[fd]
+			fdMeta, ok := i.model.FieldMap[fd]
 			if !ok {
 				return nil, errs.NewUnknownField(fd)
 			}
@@ -103,28 +110,18 @@ func (i *Inserter[T]) Build() (*Query, error) {
 	i.sb.WriteString(")")
 	i.sb.WriteString(" VALUES ")
 	i.args = make([]any, 0, len(i.values)*len(fields))
-	for r, v := range i.values {
+	for r := range i.values {
 		if r > 0 {
 			i.sb.WriteString(",")
 		}
 		i.sb.WriteString("(")
-
-		// 结构体读取字段值只能用点号操作符，想要通过结构体字段名来读取结构体字段的值，只能用 reflect 或者 unsafe
-		val := i.db.creator(i.model, v)
-
 		for c, field := range fields {
 			if c > 0 {
 				i.sb.WriteString(",")
 			}
 			i.sb.WriteString("?")
-
-			// val := reflect.ValueOf(i.values[r]).Elem().FieldByName(field.GoName).Interface()
-			arg, err := val.Field(field.GoName)
-			if err != nil {
-				return nil, err
-			}
-
-			i.addArgs(arg)
+			val := reflect.ValueOf(i.values[r]).Elem().FieldByName(field.GoName).Interface()
+			i.addArgs(val)
 		}
 		i.sb.WriteString(")")
 	}
@@ -144,16 +141,44 @@ func (i *Inserter[T]) Build() (*Query, error) {
 }
 
 func (i *Inserter[T]) Exec(ctx context.Context) Result {
-	q, err := i.Build()
+	var err error
+	i.model, err = i.r.Get(new(T))
 	if err != nil {
 		return Result{
 			err: err,
 		}
 	}
 
-	res, err := i.db.db.ExecContext(ctx, q.SQL, q.Args...)
+	res := exec(ctx, i.sess, i.core, &QueryContext{
+		Type:    "INSERT",
+		Builder: i,
+		Model:   i.model,
+	})
+
+	var sqlRes sql.Result
+	if res.Result != nil {
+		sqlRes = res.Result.(sql.Result)
+	}
+
 	return Result{
-		res: res,
-		err: err,
+		err: res.Err,
+		res: sqlRes,
 	}
 }
+
+// var _ Handler = (&Inserter[any]{}).execHandler
+
+// func (i *Inserter[T]) execHandler(ctx context.Context, qc *QueryContext) *QueryResult {
+// 	q, err := i.Build()
+// 	if err != nil {
+// 		return &QueryResult{
+// 			Err: err,
+// 		}
+// 	}
+
+// 	res, err := i.sess.execContext(ctx, q.SQL, q.Args...)
+// 	return &QueryResult{
+// 		Err:    err,
+// 		Result: res,
+// 	}
+// }

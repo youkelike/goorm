@@ -13,7 +13,7 @@ type Selectable interface {
 
 type Selector[T any] struct {
 	builder
-	db *DB
+	sess Session
 
 	// select 子句
 	columns []Selectable
@@ -34,31 +34,33 @@ type Selector[T any] struct {
 	limit int
 }
 
-func NewSelector[T any](db *DB) *Selector[T] {
+func NewSelector[T any](sess Session) *Selector[T] {
+	c := sess.getCore()
 	return &Selector[T]{
 		builder: builder{
-			dialect: db.dialect,
-			quoter:  db.dialect.quoter(),
+			core:   c,
+			quoter: c.dialect.quoter(),
 		},
-		db: db,
+		sess: sess,
 	}
 }
 
 func (s *Selector[T]) Build() (*Query, error) {
-	var err error
-	s.model, err = s.db.r.Register(new(T))
-	if err != nil {
-		return nil, err
+	if s.model == nil {
+		var err error
+		s.model, err = s.r.Get(new(T))
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	s.sb.WriteString("SELECT ")
-
-	err = s.buildColumns()
+	err := s.buildColumns()
 	if err != nil {
 		return nil, err
 	}
-
 	s.sb.WriteString(" FROM ")
+
 	if s.table == "" {
 		s.sb.WriteString(s.model.TableName)
 	} else {
@@ -216,7 +218,7 @@ func (s *Selector[T]) buildColumns() error {
 		case Aggregate:
 			s.sb.WriteString(c.fn)
 			s.sb.WriteString("(")
-			err := s.buildColumn(C(c.arg))
+			err := s.buildColumn(Column{name: c.arg})
 			if err != nil {
 				return err
 			}
@@ -272,26 +274,39 @@ func (s *Selector[T]) Offset(val int) *Selector[T] {
 }
 
 func (s *Selector[T]) Get(ctx context.Context) (*T, error) {
-	q, err := s.Build()
-	if err != nil {
-		return nil, err
-	}
-	db := s.db.db
-	rows, err := db.QueryContext(ctx, q.SQL, q.Args...)
+	var err error
+	s.model, err = s.r.Get(new(T))
 	if err != nil {
 		return nil, err
 	}
 
-	if !rows.Next() {
-		return nil, errs.ErrNoRows
+	// 这样改写是为了加入 middleware 功能
+	res := get[T](ctx, s.sess, s.core, &QueryContext{
+		Type:    "SELECT",
+		Builder: s,
+		Model:   s.model,
+	})
+	if res.Result != nil {
+		return res.Result.(*T), res.Err
 	}
-
-	tp := new(T)
-	val := s.db.creator(s.model, tp)
-	val.SetColumns(rows)
-	return tp, err
+	return nil, res.Err
 }
 
 func (s *Selector[T]) GetMulti(ctx context.Context) ([]*T, error) {
-	panic("")
+	var err error
+	s.model, err = s.r.Get(new(T))
+	if err != nil {
+		return nil, err
+	}
+
+	// 这样改写是为了加入 middleware 功能
+	res := getMulti[T](ctx, s.sess, s.core, &QueryContext{
+		Type:    "SELECT",
+		Builder: s,
+		Model:   s.model,
+	})
+	if res.Result != nil {
+		return res.Result.([]*T), res.Err
+	}
+	return nil, res.Err
 }
