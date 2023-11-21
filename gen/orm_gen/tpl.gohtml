@@ -1,0 +1,26 @@
+package {{ .Package }}
+
+import (
+    "gitee.com/youkelike/orm"
+    {{range $idx, $import := .Imports}}
+    {{$import}}
+    {{end}}
+)
+
+{{$ops := .Ops}}
+
+{{range $idx, $typ := .Types}}
+const (
+    {{range $jdx, $field := $typ.Fields}}
+    {{$typ.Name}}{{$field.Name}} = "{{$field.Name}}"
+    {{end}}
+)
+
+{{range $jdx, $field := $typ.Fields}}
+{{range $kdx, $op := $ops}}
+func {{$typ.Name}}{{$field.Name}}{{$op}}(val {{$field.Type}}) orm.Predicate {
+    return orm.C("{{$field.Name}}").{{$op}}(val)
+}
+{{end}}
+{{end}}
+{{end}}

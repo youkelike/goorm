@@ -72,20 +72,5 @@ func (s RawQuerier[T]) Get(ctx context.Context) (*T, error) {
 }
 
 func (r RawQuerier[T]) GetMulti(ctx context.Context) ([]*T, error) {
-	var err error
-	r.model, err = r.r.Get(new(T))
-	if err != nil {
-		return nil, err
-	}
-
-	// 这样改写是为了加入 middleware 功能
-	res := getMulti[T](ctx, r.sess, r.core, &QueryContext{
-		Type:    "RAW",
-		Builder: r,
-		Model:   r.model,
-	})
-	if res.Result != nil {
-		return res.Result.([]*T), res.Err
-	}
-	return nil, res.Err
+	panic("")
 }

@@ -17,7 +17,6 @@ type core struct {
 }
 
 func get[T any](ctx context.Context, sess Session, c core, qc *QueryContext) *QueryResult {
-	// 把业务逻辑改造成一个 handler
 	var root Handler = func(ctx context.Context, qc *QueryContext) *QueryResult {
 		return getHandler[T](ctx, sess, c, qc)
 	}

@@ -36,3 +36,7 @@ func NewUnsupportedAssignable(expr any) error {
 func NewErrFailedToRollback(bizErr, rbErr error, panicked bool) error {
 	return fmt.Errorf("orm: 事务闭包回滚失败，业务错误：%w，回滚错误：%s，是否panic：%t", bizErr, rbErr, panicked)
 }
+
+func NewUnsupportTable(table any) error {
+	return fmt.Errorf("orm: 不支持的TableReference类型 %v", table)
+}

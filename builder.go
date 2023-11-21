@@ -24,18 +24,37 @@ func (b *builder) quote(name string) {
 }
 
 func (b *builder) buildColumn(c Column) error {
-	fd, ok := b.model.FieldMap[c.name]
-	if !ok {
-		return errs.NewUnknownField(c.name)
-	}
-	b.sb.WriteString(fd.ColName)
-	if c.alias != "" {
-		b.sb.WriteString(" AS ")
-		b.sb.WriteString(c.alias)
-	}
-	if c.order != "" {
-		b.sb.WriteString(" ")
-		b.sb.WriteString(c.order)
+	switch table := c.table.(type) {
+	case nil:
+		fd, ok := b.core.model.FieldMap[c.name]
+		if !ok {
+			return errs.NewUnknownField(c.name)
+		}
+		b.sb.WriteString(fd.ColName)
+		if c.alias != "" {
+			b.sb.WriteString(" AS ")
+			b.sb.WriteString(c.alias)
+		}
+	case Table:
+		m, err := b.core.r.Get(table.entity)
+		if err != nil {
+			return err
+		}
+		fd, ok := m.FieldMap[c.name]
+		if !ok {
+			return errs.NewUnknownField(c.name)
+		}
+		if table.alias != "" {
+			b.sb.WriteString(table.alias)
+			b.sb.WriteString(".")
+		}
+		b.sb.WriteString(fd.ColName)
+		if c.alias != "" {
+			b.sb.WriteString(" AS ")
+			b.sb.WriteString(c.alias)
+		}
+	default:
+		return errs.NewUnsupportTable(table)
 	}
 	return nil
 }

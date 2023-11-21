@@ -27,7 +27,7 @@ func (s standardSQL) buildUpsert(b *builder, odk *Upsert) error {
 		if i > 0 {
 			b.sb.WriteString(",")
 		}
-		err := b.buildColumn(C(col))
+		err := b.buildColumn(Column{name: col})
 		if err != nil {
 			return err
 		}

@@ -3,9 +3,10 @@ package orm
 type op string
 
 const (
-	opEq  op = "="
-	opGt  op = ">"
-	opLt  op = "<"
+	opEq op = "="
+	opGt op = ">"
+	opLt op = "<"
+
 	opNot op = "NOT"
 	opAnd op = "AND"
 	opOr  op = "OR"
@@ -47,7 +48,9 @@ func (left Predicate) Or(right Predicate) Predicate {
 	}
 }
 
-func (p Predicate) expr() {}
+func (p Predicate) expr() {
+
+}
 
 type value struct {
 	val any

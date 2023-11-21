@@ -3,6 +3,7 @@ package orm
 import (
 	"context"
 	"strconv"
+	"strings"
 
 	"gitee.com/youkelike/orm/internal/errs"
 )
@@ -18,7 +19,7 @@ type Selector[T any] struct {
 	// select 子句
 	columns []Selectable
 	// from 子句
-	table string
+	table TableReference
 	// where 子句
 	// where 的数据类型只能是 Predicate，不能是 Expression，因为 Column、Value 都不能直接放到 where 中
 	where []Predicate
@@ -61,11 +62,15 @@ func (s *Selector[T]) Build() (*Query, error) {
 	}
 	s.sb.WriteString(" FROM ")
 
-	if s.table == "" {
-		s.sb.WriteString(s.model.TableName)
-	} else {
-		s.sb.WriteString(s.table)
+	err = s.buildTable(s.table)
+	if err != nil {
+		return nil, err
 	}
+	// if s.table == "" {
+	// 	s.sb.WriteString(s.model.TableName)
+	// } else {
+	// 	s.sb.WriteString(s.table)
+	// }
 
 	if len(s.where) > 0 {
 		s.sb.WriteString(" WHERE ")
@@ -144,6 +149,76 @@ func (s *Selector[T]) Build() (*Query, error) {
 		SQL:  s.sb.String(),
 		Args: s.args,
 	}, nil
+}
+
+func (s *Selector[T]) buildTable(table TableReference) error {
+	switch t := table.(type) {
+	case nil:
+		s.sb.WriteString(s.model.TableName)
+	case Table:
+		m, err := s.r.Get(t.entity)
+		if err != nil {
+			return err
+		}
+		s.sb.WriteString(m.TableName)
+		if t.alias != "" {
+			s.sb.WriteString(" AS ")
+			s.sb.WriteString(t.alias)
+
+		}
+	case Join:
+		s.sb.WriteString("(")
+		err := s.buildTable(t.left)
+		if err != nil {
+			return err
+		}
+		s.sb.WriteString(" " + t.typ + " ")
+		err = s.buildTable(t.right)
+		if err != nil {
+			return err
+		}
+
+		if len(t.using) > 0 {
+			s.sb.WriteString(" USING (")
+			for i, col := range t.using {
+				if i > 0 {
+					s.sb.WriteString(",")
+				}
+				err := s.buildColumn(Column{name: col})
+				if err != nil {
+					return err
+				}
+			}
+			s.sb.WriteString(")")
+		}
+
+		if len(t.on) > 0 {
+			s.sb.WriteString(" ON ")
+			p := t.on[0]
+			for i := 1; i < len(t.on); i++ {
+				p = p.And(t.on[i])
+			}
+			if err := s.buildExpresssion(p); err != nil {
+				return err
+			}
+		}
+		s.sb.WriteString(")")
+	case Subquery[T]:
+		res, err := t.builder.Build()
+		if err != nil {
+			return err
+		}
+
+		s.addArgs(res.Args...)
+		s.sb.WriteString("(")
+		s.sb.WriteString(strings.Trim(res.SQL, ";"))
+		s.sb.WriteString(")")
+		s.sb.WriteString(" AS ")
+		s.sb.WriteString(t.as)
+	default:
+		return errs.NewUnsupportTable(table)
+	}
+	return nil
 }
 
 func (s *Selector[T]) buildExpresssion(expr Expression) error {
@@ -240,7 +315,7 @@ func (s *Selector[T]) Select(cols ...Selectable) *Selector[T] {
 	return s
 }
 
-func (s *Selector[T]) From(table string) *Selector[T] {
+func (s *Selector[T]) From(table TableReference) *Selector[T] {
 	s.table = table
 	return s
 }
@@ -280,7 +355,6 @@ func (s *Selector[T]) Get(ctx context.Context) (*T, error) {
 		return nil, err
 	}
 
-	// 这样改写是为了加入 middleware 功能
 	res := get[T](ctx, s.sess, s.core, &QueryContext{
 		Type:    "SELECT",
 		Builder: s,

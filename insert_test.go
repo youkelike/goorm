@@ -149,7 +149,7 @@ func TestSQLite_Inserter_Build(t *testing.T) {
 				LastName:  &sql.NullString{Valid: true, String: "Jerry"},
 			}).Upsert().ConflictColumns("Id").Update(Assign("Age", 10), Assign("FirstName", "Bob")),
 			wantQuery: &Query{
-				SQL:  "INSERT INTO test_model (id,first_name,age,last_name) VALUES (?,?,?,?) ON CONFLICT(`id`) DO UPDATE SET age=?,first_name=?;",
+				SQL:  "INSERT INTO test_model (id,first_name,age,last_name) VALUES (?,?,?,?) ON CONFLICT(id) DO UPDATE SET age=?,first_name=?;",
 				Args: []any{int64(1), "Tom", int8(18), &sql.NullString{Valid: true, String: "Jerry"}, 10, "Bob"},
 			},
 		},

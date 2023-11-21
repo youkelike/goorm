@@ -3,8 +3,6 @@ package orm
 import (
 	"context"
 	"database/sql"
-	"database/sql/driver"
-	"log"
 
 	"gitee.com/youkelike/orm/internal/errs"
 	"gitee.com/youkelike/orm/internal/valuer"
@@ -36,7 +34,7 @@ func (db *DB) DoTx(ctx context.Context,
 	defer func() {
 		if panicked || err != nil {
 			e := tx.Rollback()
-			err = errs.NewErrFailedToRollback(err, e, panicked)
+			err = errs.NewErrFailedToRollback(err, e, true)
 		} else {
 			err = tx.Commit()
 		}
@@ -51,10 +49,11 @@ func (db *DB) BeginTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Tx{tx: tx, db: db}, nil
+	return &Tx{tx: tx}, nil
 }
 
 // type txKey struct{}
+
 // func (db *DB) BeginTxV2(ctx context.Context, opts *sql.TxOptions) (context.Context, *Tx, error) {
 // 	val := ctx.Value(txKey{})
 // 	tx, ok := val.(*Tx)
@@ -65,7 +64,6 @@ func (db *DB) BeginTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error) {
 // 	if err != nil {
 // 		return nil, nil, err
 // 	}
-// ctx = context.WithValue(ctx, txKey{}, tx)
 // 	return ctx, tx, nil
 // }
 
@@ -75,15 +73,6 @@ func (db *DB) queryContext(ctx context.Context, query string, args ...any) (*sql
 
 func (db *DB) execContext(ctx context.Context, query string, args ...any) (sql.Result, error) {
 	return db.db.ExecContext(ctx, query, args...)
-}
-
-func (db *DB) Wait() error {
-	err := db.db.Ping()
-	for err == driver.ErrBadConn {
-		log.Println("数据库启动中。。。")
-		err = db.db.Ping()
-	}
-	return nil
 }
 
 type DBOption func(*DB)
