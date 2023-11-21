@@ -4,78 +4,52 @@ import (
 	"strings"
 
 	"gitee.com/youkelike/orm/internal/errs"
+	"gitee.com/youkelike/orm/model"
 )
 
 type builder struct {
 	sb    strings.Builder
-	model *Model
 	args  []any
+	model *model.Model
+
+	dialect Dialect
+	quoter  byte
 }
 
-func (d *builder) buildWhere(ps []Predicate) error {
-	d.sb.WriteString(" WHERE ")
-	p := ps[0]
-	for i := 1; i < len(ps); i++ {
-		p = p.And(ps[i])
-	}
+func (b *builder) quote(name string) {
+	b.sb.WriteByte(b.quoter)
+	b.sb.WriteString(name)
+	b.sb.WriteByte(b.quoter)
+}
 
-	if err := d.buildExpression(p); err != nil {
-		return err
+func (b *builder) buildColumn(c Column) error {
+	// fd, ok := b.model.FieldMap[name]
+	// if !ok {
+	// 	return errs.NewUnknownField(name)
+	// }
+	// b.quote(fd.ColName)
+	// return nil
+
+	fd, ok := b.model.FieldMap[c.name]
+	if !ok {
+		return errs.NewUnknownField(c.name)
+	}
+	b.sb.WriteString(fd.ColName)
+	if c.alias != "" {
+		b.sb.WriteString(" AS ")
+		b.sb.WriteString(c.alias)
+	}
+	if c.order != "" {
+		b.sb.WriteString(" ")
+		b.sb.WriteString(c.order)
 	}
 	return nil
 }
 
-func (d *builder) buildExpression(expr Expression) error {
-	switch exp := expr.(type) {
-	case Predicate:
-		_, ok := exp.left.(Predicate)
-		if ok {
-			d.sb.WriteString("(")
-		}
-		if err := d.buildExpression(exp.left); err != nil {
-			return err
-		}
-		if ok {
-			d.sb.WriteString(")")
-		}
-
-		if exp.op == opAnd || exp.op == opOr || exp.op == opNot {
-			d.sb.WriteString(" ")
-		}
-		d.sb.WriteString(exp.op.String())
-		if exp.op == opAnd || exp.op == opOr || exp.op == opNot {
-			d.sb.WriteString(" ")
-		}
-
-		_, ok = exp.right.(Predicate)
-		if ok {
-			d.sb.WriteString("(")
-		}
-		if err := d.buildExpression(exp.right); err != nil {
-			return err
-		}
-		if ok {
-			d.sb.WriteString(")")
-		}
-	case Column:
-		fd, ok := d.model.fieldMap[exp.name]
-		if !ok {
-			return errs.NewUnknownField(exp.name)
-		}
-		d.sb.WriteString(fd.colName)
-	case value:
-		d.sb.WriteString("?")
-		d.addArg(exp.val)
-	case nil:
-	default:
-		return errs.NewUnsupportExpression(exp)
+func (b *builder) addArgs(vals ...any) error {
+	if len(vals) == 0 {
+		return nil
 	}
+	b.args = append(b.args, vals...)
 	return nil
-}
-
-func (d *builder) addArg(val any) {
-	if d.args == nil {
-		d.args = make([]any, 0, 8)
-	}
-	d.args = append(d.args, val)
 }

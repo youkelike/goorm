@@ -1,7 +1,6 @@
-package orm
+package model
 
 import (
-	"fmt"
 	"reflect"
 	"strings"
 	"sync"
@@ -24,35 +23,44 @@ type Registry interface {
 // 通过反射解析出来的结构体到表的映射
 type Model struct {
 	// 表名
-	tableName string
+	TableName string
 	// 字段名到字段的映射
-	fieldMap map[string]*field
+	FieldMap map[string]*Field
 	// 列名到字段的映射
-	columnMap map[string]*field
+	ColumnMap map[string]*Field
+	Fields    []*Field
 }
 
-type field struct {
-	goName  string
-	colName string
-	typ     reflect.Type
+type Field struct {
+	GoName  string
+	ColName string
+	Typ     reflect.Type
+	Offset  uintptr
+}
+
+// 用接口的方式提供自定义表名的途径
+type TableName interface {
+	TableName() string
 }
 
 type ModelOption func(*Model) error
 
-func ModelWithTableName(tableName string) ModelOption {
+// 编程的方式改变表名
+func WithTableName(TableName string) ModelOption {
 	return func(m *Model) error {
-		m.tableName = tableName
+		m.TableName = TableName
 		return nil
 	}
 }
 
-func ModelWithColumnName(field, colname string) ModelOption {
+// 编程的方式改变列名
+func WithColumnName(Field, colname string) ModelOption {
 	return func(m *Model) error {
-		fd, ok := m.fieldMap[field]
+		fd, ok := m.FieldMap[Field]
 		if !ok {
-			return errs.NewUnknownField(field)
+			return errs.NewUnknownField(Field)
 		}
-		fd.colName = colname
+		fd.ColName = colname
 		return nil
 	}
 }
@@ -62,32 +70,28 @@ type registry struct {
 	models sync.Map
 }
 
-func NewRegistry() *registry {
+func NewRegistry() Registry {
 	return &registry{}
 }
 
 func (r *registry) Get(val any) (*Model, error) {
-	typ := reflect.TypeOf(val)
-	for typ.Kind() == reflect.Pointer {
-		typ = typ.Elem()
-	}
-	m, ok := r.models.Load(typ)
+	Typ := reflect.TypeOf(val)
+	m, ok := r.models.Load(Typ)
 	if ok {
 		return m.(*Model), nil
 	}
 
-	fmt.Println("register")
 	mm, err := r.Register(val)
 	if err != nil {
 		return nil, err
 	}
-	// r.models.Store(typ, mm)
+	// r.models.Store(Typ, mm)
 	return mm, nil
 }
 
 // func (r *registry) get(val any) (*model, error) {
-// 	typ := reflect.TypeOf(val)
-// 	m, ok := r.models[typ]
+// 	Typ := reflect.TypeOf(val)
+// 	m, ok := r.models[Typ]
 // 	if ok {
 // 		return m, nil
 // 	}
@@ -96,7 +100,7 @@ func (r *registry) Get(val any) (*Model, error) {
 // 	if err != nil {
 // 		return nil, err
 // 	}
-// 	r.models[typ] = m
+// 	r.models[Typ] = m
 // 	return m, nil
 // }
 
@@ -113,28 +117,31 @@ func (r *registry) Register(entity any, opts ...ModelOption) (*Model, error) {
 	}
 
 	numField := typ.NumField()
-	fieldMap := make(map[string]*field, numField)
-	columnMap := make(map[string]*field, numField)
+	FieldMap := make(map[string]*Field, numField)
+	ColumnMap := make(map[string]*Field, numField)
+	Fields := make([]*Field, 0, numField)
 	for i := 0; i < numField; i++ {
 		fd := typ.Field(i)
 
-		// 从 tag 解析出表中列名
+		// 从 struct 字段名、tag 解析出表字段名
 		pair, err := r.parseTag(fd.Tag)
 		if err != nil {
 			return nil, err
 		}
-		colName := pair[tagColumn]
-		if colName == "" {
-			colName = underscoreName(fd.Name)
+		ColName := pair[tagColumn]
+		if ColName == "" {
+			ColName = underscoreName(fd.Name)
 		}
 
-		f := &field{
-			goName:  fd.Name,
-			colName: colName,
-			typ:     fd.Type,
+		f := &Field{
+			GoName:  fd.Name,
+			ColName: ColName,
+			Typ:     fd.Type,
+			Offset:  fd.Offset,
 		}
-		fieldMap[fd.Name] = f
-		columnMap[colName] = f
+		FieldMap[fd.Name] = f
+		ColumnMap[ColName] = f
+		Fields = append(Fields, f)
 	}
 
 	var tableName string
@@ -146,9 +153,10 @@ func (r *registry) Register(entity any, opts ...ModelOption) (*Model, error) {
 	}
 
 	m := &Model{
-		tableName: tableName,
-		fieldMap:  fieldMap,
-		columnMap: columnMap,
+		TableName: tableName,
+		FieldMap:  FieldMap,
+		ColumnMap: ColumnMap,
+		Fields:    Fields,
 	}
 	for _, opt := range opts {
 		err := opt(m)
@@ -156,8 +164,7 @@ func (r *registry) Register(entity any, opts ...ModelOption) (*Model, error) {
 			return nil, err
 		}
 	}
-	r.models.Store(typ, m)
-	// r.models.Store(reflect.TypeOf(entity), m)
+	r.models.Store(reflect.TypeOf(entity), m)
 
 	return m, nil
 }
@@ -182,9 +189,9 @@ func (r *registry) parseTag(tag reflect.StructTag) (map[string]string, error) {
 	return res, nil
 }
 
-func underscoreName(tableName string) string {
+func underscoreName(TableName string) string {
 	var buf []byte
-	for i, v := range tableName {
+	for i, v := range TableName {
 		if unicode.IsUpper(v) {
 			if i != 0 {
 				buf = append(buf, '_')

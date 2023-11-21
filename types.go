@@ -2,7 +2,6 @@ package orm
 
 import (
 	"context"
-	"database/sql"
 )
 
 // 执行查询
@@ -13,7 +12,7 @@ type Querier[T any] interface {
 
 // 执行增删改
 type Executor interface {
-	Exec(ctx context.Context) (sql.Result, error)
+	Exec(ctx context.Context) Result
 }
 
 // 生成 sql 语句
@@ -25,9 +24,4 @@ type QueryBuilder interface {
 type Query struct {
 	SQL  string
 	Args []any
-}
-
-// 用接口的方式提供自定义表名的途径
-type TableName interface {
-	TableName() string
 }

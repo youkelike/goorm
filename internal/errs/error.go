@@ -6,8 +6,11 @@ import (
 )
 
 var (
-	ErrPointerOnly = errors.New("orm: 只支持结构体和指向结构体的一级指针")
-	ErrNoRows      = errors.New("orm: 没有数据")
+	ErrPointerOnly      = errors.New("orm: 只支持结构体和指向结构体的一级指针")
+	ErrNoRows           = errors.New("orm: 没有数据")
+	ErrInsertZeroRow    = errors.New("orm: 插入 0 行")
+	ErrNoGroupUseHaving = errors.New("orm: having 必须配合 group 使用")
+	ErrNoOrderByVerb    = errors.New("orm: order by 必须指定字段排序规则")
 )
 
 func NewUnknownField(name string) error {
@@ -24,4 +27,8 @@ func NewUnsupportExpression(expr any) error {
 
 func NewInvalidTagContent(tag string) error {
 	return fmt.Errorf("orm: 不支持的标签 %s", tag)
+}
+
+func NewUnsupportedAssignable(expr any) error {
+	return fmt.Errorf("orm: 不支持的赋值表达式类型 %v", expr)
 }

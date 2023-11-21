@@ -2,43 +2,65 @@ package orm
 
 import (
 	"context"
-	"reflect"
-	"strings"
+	"strconv"
 
 	"gitee.com/youkelike/orm/internal/errs"
 )
 
+type Selectable interface {
+	selectable()
+}
+
 type Selector[T any] struct {
+	builder
+	db *DB
+
+	// select 子句
+	columns []Selectable
+	// from 子句
 	table string
+	// where 子句
+	// where 的数据类型只能是 Predicate，不能是 Expression，因为 Column、Value 都不能直接放到 where 中
 	where []Predicate
-
-	sb   *strings.Builder
-	args []any
-
-	model *Model
-	db    *DB
+	// group 子句
+	groupBy []Column
+	// having 子句
+	having []Predicate
+	// order 子句
+	orderBy []Column
+	// offset 子句
+	offset int
+	// limit 子句
+	limit int
 }
 
 func NewSelector[T any](db *DB) *Selector[T] {
 	return &Selector[T]{
-		sb: &strings.Builder{},
+		builder: builder{
+			dialect: db.dialect,
+			quoter:  db.dialect.quoter(),
+		},
 		db: db,
 	}
 }
 
 func (s *Selector[T]) Build() (*Query, error) {
 	var err error
-	// 这里用 Get 比 Register 好
-	s.model, err = s.db.r.Get(new(T))
-	// s.model, err = s.db.r.Register(new(T))
+	s.model, err = s.db.r.Register(new(T))
 	if err != nil {
 		return nil, err
 	}
 
-	s.sb.WriteString("SELECT * FROM ")
+	s.sb.WriteString("SELECT ")
 
+	err = s.buildColumns()
+	if err != nil {
+		return nil, err
+	}
+
+	s.sb.WriteString(" FROM ")
 	if s.table == "" {
-		s.sb.WriteString(s.model.tableName)
+		s.sb.WriteString(s.model.TableName)
 	} else {
 		s.sb.WriteString(s.table)
 	}
@@ -55,6 +77,63 @@ func (s *Selector[T]) Build() (*Query, error) {
 		if err := s.buildExpresssion(p); err != nil {
 			return nil, err
 		}
+	}
+
+	if len(s.groupBy) > 0 {
+		s.sb.WriteString(" GROUP BY ")
+		for i, col := range s.groupBy {
+			if i > 0 {
+				s.sb.WriteString(",")
+			}
+			err := s.buildColumn(col)
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+
+	if len(s.having) > 0 {
+		if len(s.groupBy) == 0 {
+			return nil, errs.ErrNoGroupUseHaving
+		}
+		s.sb.WriteString(" HAVING ")
+		// 先把切片形式的条件组装成链表
+		p := s.having[0]
+		for i := 1; i < len(s.having); i++ {
+			p = p.And(s.having[i])
+		}
+		// 遍历链表
+		if err := s.buildExpresssion(p); err != nil {
+			return nil, err
+		}
+	}
+
+	if len(s.orderBy) > 0 {
+		s.sb.WriteString(" ORDER BY ")
+		for i, col := range s.orderBy {
+			if col.order == "" {
+				return nil, errs.ErrNoOrderByVerb
+			}
+			if i > 0 {
+				s.sb.WriteString(",")
+			}
+			err := s.buildColumn(col)
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+
+	if s.offset > 0 {
+		s.sb.WriteString(" OFFSET ")
+		s.sb.WriteString(strconv.Itoa(s.offset))
+		if s.limit > 0 {
+			s.sb.WriteString(",")
+		}
+	}
+	if s.limit > 0 {
+		s.sb.WriteString(" LIMIT ")
+		s.sb.WriteString(strconv.Itoa(s.limit))
 	}
 
 	s.sb.WriteString(";")
@@ -99,25 +178,63 @@ func (s *Selector[T]) buildExpresssion(expr Expression) error {
 			s.sb.WriteString(")")
 		}
 	case Column:
-		fd, ok := s.model.fieldMap[p.name]
-		if !ok {
-			return errs.NewUnknownField(p.name)
+		p.alias = ""
+		err := s.buildColumn(p)
+		if err != nil {
+			return err
 		}
-		s.sb.WriteString(fd.colName)
 	case value:
 		s.sb.WriteString("?")
-		s.addArg(p.val)
+		s.addArgs(p.val)
+	case RawExpr:
+		s.sb.WriteString("(")
+		s.sb.WriteString(p.raw)
+		s.sb.WriteString(")")
+		s.addArgs(p.args...)
 	default:
 		return errs.NewUnsupportExpression(expr)
 	}
 	return nil
 }
 
-func (s *Selector[T]) addArg(val any) *Selector[T] {
-	if s.args == nil {
-		s.args = make([]any, 0, 8)
+func (s *Selector[T]) buildColumns() error {
+	if len(s.columns) == 0 {
+		s.sb.WriteString("*")
+		return nil
 	}
-	s.args = append(s.args, val)
+
+	for i, col := range s.columns {
+		if i > 0 {
+			s.sb.WriteString(",")
+		}
+		switch c := col.(type) {
+		case Column:
+			err := s.buildColumn(col.(Column))
+			if err != nil {
+				return err
+			}
+		case Aggregate:
+			s.sb.WriteString(c.fn)
+			s.sb.WriteString("(")
+			err := s.buildColumn(C(c.arg))
+			if err != nil {
+				return err
+			}
+			s.sb.WriteString(")")
+			if c.alias != "" {
+				s.sb.WriteString(" AS ")
+				s.sb.WriteString(c.alias)
+			}
+		case RawExpr:
+			s.sb.WriteString(c.raw)
+			s.addArgs(c.args...)
+		}
+	}
+	return nil
+}
+
+func (s *Selector[T]) Select(cols ...Selectable) *Selector[T] {
+	s.columns = cols
 	return s
 }
 
@@ -128,6 +245,29 @@ func (s *Selector[T]) From(table string) *Selector[T] {
 
 func (s *Selector[T]) Where(ps ...Predicate) *Selector[T] {
 	s.where = ps
+	return s
+}
+
+func (s *Selector[T]) GroupBy(cols ...Column) *Selector[T] {
+	s.groupBy = cols
+	return s
+}
+
+func (s *Selector[T]) Having(ps ...Predicate) *Selector[T] {
+	s.having = ps
+	return s
+}
+
+func (s *Selector[T]) OrderBy(cols ...Column) *Selector[T] {
+	s.orderBy = cols
+	return s
+}
+func (s *Selector[T]) Limit(val int) *Selector[T] {
+	s.limit = val
+	return s
+}
+func (s *Selector[T]) Offset(val int) *Selector[T] {
+	s.offset = val
 	return s
 }
 
@@ -143,48 +283,12 @@ func (s *Selector[T]) Get(ctx context.Context) (*T, error) {
 	}
 
 	if !rows.Next() {
-		return nil, ErrNoRows
+		return nil, errs.ErrNoRows
 	}
 
-	// 查询到记录的所有列名
-	cs, err := rows.Columns()
-	if err != nil {
-		return nil, err
-	}
-
-	// 挖坑，指定每一个坑的数据类型
-	vals := make([]any, 0, len(cs))
-	for _, c := range cs {
-		fd, ok := s.model.columnMap[c]
-		if !ok {
-			return nil, errs.NewUnknownColumn(c)
-		}
-		// 根据字段类型创建一个指针类型的值
-		val := reflect.New(fd.typ)
-		// 不能这样写，因为后面要对它赋值
-		// val := reflect.Zero(fd.typ)
-
-		// vals 里接收的是 any 类型，需要转换一下
-		vals = append(vals, val.Interface())
-	}
-
-	// 利用查询的返回值，往坑里填具体值
-	err = rows.Scan(vals...)
-	if err != nil {
-		return nil, err
-	}
-
-	// 把填在坑里的值填到 struct 中
-	// 这里操作的是具体结构体的指针
 	tp := new(T)
-	tpValue := reflect.ValueOf(tp)
-	for i, c := range cs {
-		fd := s.model.columnMap[c]
-
-		// 结构体指针必须转成结构体，才能给其字段赋值
-		tpValue.Elem().FieldByName(fd.goName).Set(reflect.ValueOf(vals[i]).Elem())
-	}
-
+	val := s.db.creator(s.model, tp)
+	val.SetColumns(rows)
 	return tp, err
 }
 

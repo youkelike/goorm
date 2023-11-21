@@ -4,6 +4,8 @@ type op string
 
 const (
 	opEq  op = "="
+	opGt  op = ">"
+	opLt  op = "<"
 	opNot op = "NOT"
 	opAnd op = "AND"
 	opOr  op = "OR"
@@ -18,26 +20,6 @@ type Predicate struct {
 	op    op
 	right Expression
 }
-
-type Column struct {
-	name string
-}
-
-// C("name")
-func C(name string) Column {
-	return Column{name: name}
-}
-
-// C("name").Eq("Tom")
-func (c Column) Eq(arg any) Predicate {
-	return Predicate{
-		left:  c,
-		op:    opEq,
-		right: value{val: arg},
-	}
-}
-
-func (c Column) expr() {}
 
 // Not(C("name").Eq("Tom"))
 func Not(p Predicate) Predicate {
@@ -67,10 +49,6 @@ func (left Predicate) Or(right Predicate) Predicate {
 
 func (p Predicate) expr() {
 
-}
-
-type Expression interface {
-	expr()
 }
 
 type value struct {

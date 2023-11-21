@@ -4,11 +4,12 @@ import (
 	"strings"
 
 	"gitee.com/youkelike/orm/internal/errs"
+	model "gitee.com/youkelike/orm/model"
 )
 
 type Deletor[T any] struct {
 	table string
-	model *Model
+	model *model.Model
 	where []Predicate
 	args  []any
 	sb    *strings.Builder
@@ -31,7 +32,7 @@ func (d *Deletor[T]) Build() (*Query, error) {
 
 	d.sb.WriteString("DELETE FROM ")
 	if d.table == "" {
-		d.sb.WriteString(d.model.tableName)
+		d.sb.WriteString(d.model.TableName)
 	} else {
 		d.sb.WriteString(d.table)
 	}
@@ -88,11 +89,11 @@ func (d *Deletor[T]) buildExpression(expr Expression) error {
 			d.sb.WriteString(")")
 		}
 	case Column:
-		fd, ok := d.model.fieldMap[exp.name]
+		fd, ok := d.model.FieldMap[exp.name]
 		if !ok {
 			return errs.NewUnknownField(exp.name)
 		}
-		d.sb.WriteString(fd.colName)
+		d.sb.WriteString(fd.ColName)
 	case value:
 		d.sb.WriteString("?")
 		d.addArg(exp.val)
