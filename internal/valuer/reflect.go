@@ -10,7 +10,7 @@ import (
 
 type reflectValue struct {
 	model *model.Model
-	val   any
+	val   reflect.Value
 }
 
 var _ Creator = NewReflectValue
@@ -18,10 +18,17 @@ var _ Creator = NewReflectValue
 func NewReflectValue(model *model.Model, val any) Value {
 	return reflectValue{
 		model: model,
-		val:   val,
+		val:   reflect.ValueOf(val).Elem(),
 	}
 }
 
+func (r reflectValue) Field(name string) (any, error) {
+	_, ok := r.model.FieldMap[name]
+	if !ok {
+		return nil, errs.NewUnknownField(name)
+	}
+	return r.val.FieldByName(name).Interface(), nil
+}
 func (r reflectValue) SetColumns(rows *sql.Rows) error {
 	cs, err := rows.Columns()
 	if err != nil {
@@ -49,7 +56,7 @@ func (r reflectValue) SetColumns(rows *sql.Rows) error {
 	}
 
 	// 这里操作的是具体结构体的指针
-	tpValueElem := reflect.ValueOf(r.val).Elem()
+	tpValueElem := r.val
 	for i, c := range cs {
 		fd := r.model.ColumnMap[c]
 

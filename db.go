@@ -49,7 +49,7 @@ func (db *DB) BeginTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Tx{tx: tx}, nil
+	return &Tx{tx: tx, db: db}, nil
 }
 
 // type txKey struct{}

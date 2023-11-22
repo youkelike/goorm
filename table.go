@@ -10,6 +10,7 @@ type Table struct {
 	alias  string
 }
 
+// entity 必须是 new(T) 的形式
 func TableOf(entity any) Table {
 	return Table{
 		entity: entity,

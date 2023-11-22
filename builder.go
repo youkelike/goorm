@@ -35,6 +35,10 @@ func (b *builder) buildColumn(c Column) error {
 			b.sb.WriteString(" AS ")
 			b.sb.WriteString(c.alias)
 		}
+		if c.order != "" {
+			b.sb.WriteString(" ")
+			b.sb.WriteString(c.order)
+		}
 	case Table:
 		m, err := b.core.r.Get(table.entity)
 		if err != nil {
@@ -47,11 +51,18 @@ func (b *builder) buildColumn(c Column) error {
 		if table.alias != "" {
 			b.sb.WriteString(table.alias)
 			b.sb.WriteString(".")
+		} else {
+			b.sb.WriteString(m.TableName)
+			b.sb.WriteString(".")
 		}
 		b.sb.WriteString(fd.ColName)
 		if c.alias != "" {
 			b.sb.WriteString(" AS ")
 			b.sb.WriteString(c.alias)
+		}
+		if c.order != "" {
+			b.sb.WriteString(" ")
+			b.sb.WriteString(c.order)
 		}
 	default:
 		return errs.NewUnsupportTable(table)

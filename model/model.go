@@ -101,6 +101,8 @@ func (r *registry) Get(val any) (*Model, error) {
 // 	return m, nil
 // }
 
+// 对于表名的解析顺序：结构体名、表名接口、表名 option
+// 对于表中列名的解析顺序：字段名、字段 tag、字段名 option
 func (r *registry) Register(entity any, opts ...ModelOption) (*Model, error) {
 	typ := reflect.TypeOf(entity)
 	for typ.Kind() == reflect.Pointer {
@@ -164,6 +166,7 @@ func (r *registry) Register(entity any, opts ...ModelOption) (*Model, error) {
 	return m, nil
 }
 
+// tag 是这个格式的：`orm:"column=id,xx=xx" xxx:"xx"`
 func (r *registry) parseTag(tag reflect.StructTag) (map[string]string, error) {
 	ormTag, ok := tag.Lookup("orm")
 	if !ok {

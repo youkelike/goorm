@@ -184,7 +184,7 @@ func TestSelector_Select(t *testing.T) {
 		},
 		{
 			name: "Avg alias",
-			s:    NewSelector[TestModel](db).Select(Avg("Age").As("ag")),
+			s:    NewSelector[TestModel](db).Select(Avg(C("Age")).As("ag")),
 			wantQuery: &Query{
 				SQL: "SELECT AVG(age) AS ag FROM test_model;",
 			},
@@ -210,28 +210,42 @@ func TestSelector_Select(t *testing.T) {
 		},
 		{
 			name: "Avg",
-			s:    NewSelector[TestModel](db).Select(Avg("Age")),
+			s:    NewSelector[TestModel](db).Select(Avg(C("Age"))),
 			wantQuery: &Query{
 				SQL: "SELECT AVG(age) FROM test_model;",
 			},
 		},
 		{
 			name: "Sum",
-			s:    NewSelector[TestModel](db).Select(Sum("Age")),
+			s:    NewSelector[TestModel](db).Select(Sum(C("Age"))),
 			wantQuery: &Query{
 				SQL: "SELECT SUM(age) FROM test_model;",
 			},
 		},
 		{
+			name: "Sum with table",
+			s:    NewSelector[TestModel](db).Select(Sum(TableOf(new(TestModel)).C("Age"))),
+			wantQuery: &Query{
+				SQL: "SELECT SUM(test_model.age) FROM test_model;",
+			},
+		},
+		{
+			name: "Sum with table alias",
+			s:    NewSelector[TestModel](db).Select(Sum(TableOf(new(TestModel)).As("t").C("Age"))),
+			wantQuery: &Query{
+				SQL: "SELECT SUM(t.age) FROM test_model;",
+			},
+		},
+		{
 			name: "multiple aggregate",
-			s:    NewSelector[TestModel](db).Select(Sum("Age"), Count("FirstName")),
+			s:    NewSelector[TestModel](db).Select(Sum(C("Age")), Count(C("FirstName"))),
 			wantQuery: &Query{
 				SQL: "SELECT SUM(age),COUNT(first_name) FROM test_model;",
 			},
 		},
 		{
 			name:    "Sum invalid",
-			s:       NewSelector[TestModel](db).Select(Sum("XXX")),
+			s:       NewSelector[TestModel](db).Select(Sum(C("XXX"))),
 			wantErr: errs.NewUnknownField("XXX"),
 		},
 		{

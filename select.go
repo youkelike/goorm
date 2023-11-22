@@ -293,7 +293,7 @@ func (s *Selector[T]) buildColumns() error {
 		case Aggregate:
 			s.sb.WriteString(c.fn)
 			s.sb.WriteString("(")
-			err := s.buildColumn(Column{name: c.arg})
+			err := s.buildColumn(c.arg)
 			if err != nil {
 				return err
 			}

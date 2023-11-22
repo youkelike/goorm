@@ -4,7 +4,7 @@ type Aggregate struct {
 	// 函数名
 	fn string
 	// 列名
-	arg string
+	arg Column
 	// 别名
 	alias string
 }
@@ -19,35 +19,35 @@ func (a Aggregate) As(alias string) Aggregate {
 
 func (a Aggregate) selectable() {}
 
-func Avg(col string) Aggregate {
+func Avg(col Column) Aggregate {
 	return Aggregate{
 		fn:  "AVG",
 		arg: col,
 	}
 }
 
-func Sum(col string) Aggregate {
+func Sum(col Column) Aggregate {
 	return Aggregate{
 		fn:  "SUM",
 		arg: col,
 	}
 }
 
-func Count(col string) Aggregate {
+func Count(col Column) Aggregate {
 	return Aggregate{
 		fn:  "COUNT",
 		arg: col,
 	}
 }
 
-func Max(col string) Aggregate {
+func Max(col Column) Aggregate {
 	return Aggregate{
 		fn:  "MAX",
 		arg: col,
 	}
 }
 
-func Min(col string) Aggregate {
+func Min(col Column) Aggregate {
 	return Aggregate{
 		fn:  "MIN",
 		arg: col,
