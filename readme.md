@@ -13,10 +13,7 @@ ORM 框架要解决的问题：
     定义一个统一的 Query 接口，把构造 SQL 分成多个部分，增删改查方法也都放里面。使用时每个模型各自创建一个接口实例，所以可以在接口上应用泛型
     增删改查分别定义接口，接口中包括中间方法（构造 SQL 某个部分）和终结方法（处理查询结果）
     在上面的基础上优化，不包含中间方法，只有 QueryBuilder(构造 SQL)、 Querier(查) 和 Executor（增删改）三个接口
-Select 子句实现：
-    这一版暂不考虑，全部用 "SELECT *"
-From 子句实现：
-    这一版简单处理，把反射解析表名和用户指定表名结合
+
 Where 子句实现：
     常规做法是类似 PrepareStatment 的方式，一个形参是 where 子句字符串（表达式中的参数用问号代替），另一个为变长形参，用于提供 where 子句中的数据，这种做法第二个变长形参容易传错
     好的做法是，对 where 子句中的表达式抽象出一个结构 Predicate
@@ -37,7 +34,6 @@ Where 子句实现：
     限制用户输入来简化代码，比如限制只能传入结构体的一级指针
     出于长远考虑，可以建立一个集中管理 error 的目录
     select 和 delete 在构建 where 子句时，很多代码重复，可以重构，提取一个共用的 builder
-
 
 解析元数据的过程很慢，每次查询都解析一次不合适，考虑把解析结果缓存下来，实现方式包括：
     用一个字典类型的包变量
@@ -73,12 +69,6 @@ Where 子句实现：
 跟数据交互的方法 ExecContext、QueryContext、Scan 等都只能接收基本类型的数据，想要自定义一种可用的数据类型（类似 sql.NullString），需要实现两个接口：
     实现了 driver.Valuer 接口的类型可以作为查询参数使用（ExecContext、QueryContext 等的第三个参数）
     实现了 sql.Scanner 接口的类型可以用作 Scan 方法的参数
-
-如何使用事务
-如何使用 PrepareStatement
-    何时关闭？要有好的使用效果，最好在应用退出时才关闭
-    遇到 sql 中的 in 查询，会导致 statement 膨胀
-sqlmock 的使用
 
 在框架中整合连接 Database 的功能：
     可以在框架的 DB 结构体中组合 sql.DB
@@ -127,8 +117,7 @@ unsafe 使用
     把变量切片传给 Scan 方法，给每个变量赋值，也就相当于给 tp 的每个字段赋值了
     
 反射和 unsafe 解析查询结果的时候，步骤差不多，可以重构：
-    一种方式是，把解析过程独立做成包方法，反射和 unsafe 各一个包方法，在使用的过程中通过一个 flag 来判断使用谁
-        缺点是扩展性不好，比如想给方法加参数会很麻烦
+    一种方式是，把解析过程独立做成包方法，反射和 unsafe 各一个包方法，在使用的过程中通过一个 flag 来判断使用谁。缺点是扩展性不好，比如想给方法加参数会很麻烦
     另一种提取一个 Valuer 抽象，反射和 unsafe 各自提供一个实现，这样更灵活：
         Valuer 中提供两个方法：SetColumns（用于解析查询结果） 和 Field（用于 insert 时根据字段名获取字段值）
         SetColumns 方法中会同时用到返回的查询结果集、模型元数据、new(T)，可以设计成把它们作为参数传入。
@@ -195,12 +184,9 @@ insert 语句有几种情况要考虑，用逐一追加的方式实现：
     给 OnDuplicateKey 添加一个字段用于存放冲突列的列表
     给前面 builder 模式的结构体 OnDuplicateKeyBuilder 添加用于指定冲突列的方法 ConflictColumns
     实现 sqlite 版本的 Dialect
-重命名
-    OnDuplicateKey 改成 Upsert
-    OnDuplicateKeyBuilder 改成 UpsertBuilder
 Dialect 抽象的缺点
     方言之间不同的地方很多，每个不同的功能点都要求给 Dialect 接口增加方法，接口很容易膨胀。只支持少量通用的方言特性就可以避免
-    因为循环引用，Dialect 不能已到 internal 包里
+    因为循环引用，Dialect 不能移动到 internal 包里
 还有一种方案是，提供一个默认的 Insertor，不同方言继承它，并改写各自特有的部分
 
 execute 语句执行结果处理
@@ -288,3 +274,15 @@ Selector.Build 内部逻辑：
     构造 order by 子句
         在输出列名的时候，要处理列的表名、别名、纯列名 3 种情况
     构造 offset limit 子句
+
+
+
+功能总结：
+用 reflect 解析元数据，支持通过标签、option 模式自定义数据表的列名，支持通过接口、option 模式自定义数据表名，
+用 reflect 和 unsafe 解析查询结果，
+使用元数据注册中心缓存解析过的模型，
+支持常用的 sql，比如聚合函数、别名、子查询、关联关系、group by、order by 等，
+支持原生 sql 片段和原生 sql 语句，
+支持数据库方言，
+支持常规事务和通过闭包的方式管理事务，
+支持中间件。
