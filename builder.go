@@ -1,7 +1,7 @@
 package orm
 
 import (
-	"strings"
+	"bytes"
 
 	"gitee.com/youkelike/orm/internal/errs"
 )
@@ -11,7 +11,7 @@ type builder struct {
 	// dialect Dialect
 	core
 
-	sb   strings.Builder
+	sb   bytes.Buffer
 	args []any
 
 	quoter byte
