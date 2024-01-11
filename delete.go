@@ -1,31 +1,35 @@
 package orm
 
 import (
-	"strings"
+	"context"
+	"database/sql"
 
 	"gitee.com/youkelike/orm/internal/errs"
-	model "gitee.com/youkelike/orm/model"
 )
 
 type Deletor[T any] struct {
+	builder
+	sess Session
+
 	table string
-	model *model.Model
+
 	where []Predicate
-	args  []any
-	sb    *strings.Builder
-	db    *DB
 }
 
-func NewDeletor[T any](db *DB) *Deletor[T] {
+func NewDeletor[T any](sess Session) *Deletor[T] {
+	c := sess.getCore()
 	return &Deletor[T]{
-		sb: &strings.Builder{},
-		db: db,
+		builder: builder{
+			core:   c,
+			quoter: c.dialect.quoter(),
+		},
+		sess: sess,
 	}
 }
 
 func (d *Deletor[T]) Build() (*Query, error) {
 	var err error
-	d.model, err = d.db.r.Register(new(T))
+	d.model, err = d.r.Register(new(T))
 	if err != nil {
 		return nil, err
 	}
@@ -57,49 +61,54 @@ func (d *Deletor[T]) Build() (*Query, error) {
 }
 
 func (d *Deletor[T]) buildExpression(expr Expression) error {
-	switch exp := expr.(type) {
+	switch p := expr.(type) {
+	case nil:
 	case Predicate:
-		_, ok := exp.left.(Predicate)
+		_, ok := p.left.(Predicate)
 		if ok {
 			d.sb.WriteString("(")
 		}
-		if err := d.buildExpression(exp.left); err != nil {
+		if err := d.buildExpression(p.left); err != nil {
 			return err
 		}
 		if ok {
 			d.sb.WriteString(")")
 		}
 
-		if exp.op == opAnd || exp.op == opOr || exp.op == opNot {
+		if p.op == opNot || p.op == opAnd || p.op == opOr {
 			d.sb.WriteString(" ")
 		}
-		d.sb.WriteString(exp.op.String())
-		if exp.op == opAnd || exp.op == opOr || exp.op == opNot {
+		d.sb.WriteString(p.op.String())
+		if p.op == opNot || p.op == opAnd || p.op == opOr {
 			d.sb.WriteString(" ")
 		}
 
-		_, ok = exp.right.(Predicate)
+		_, ok = p.right.(Predicate)
 		if ok {
 			d.sb.WriteString("(")
 		}
-		if err := d.buildExpression(exp.right); err != nil {
+		if err := d.buildExpression(p.right); err != nil {
 			return err
 		}
 		if ok {
 			d.sb.WriteString(")")
 		}
 	case Column:
-		fd, ok := d.model.FieldMap[exp.name]
-		if !ok {
-			return errs.NewUnknownField(exp.name)
+		p.alias = ""
+		err := d.buildColumn(p)
+		if err != nil {
+			return err
 		}
-		d.sb.WriteString(fd.ColName)
 	case value:
 		d.sb.WriteString("?")
-		d.addArg(exp.val)
-	case nil:
+		d.addArgs(p.val)
+	case RawExpr:
+		d.sb.WriteString("(")
+		d.sb.WriteString(p.raw)
+		d.sb.WriteString(")")
+		d.addArgs(p.args...)
 	default:
-		return errs.NewUnsupportExpression(exp)
+		return errs.NewUnsupportExpression(expr)
 	}
 	return nil
 }
@@ -114,10 +123,28 @@ func (d *Deletor[T]) Where(ps ...Predicate) *Deletor[T] {
 	return d
 }
 
-func (d *Deletor[T]) addArg(val any) *Deletor[T] {
-	if d.args == nil {
-		d.args = make([]any, 0, 8)
+func (d *Deletor[T]) Exec(ctx context.Context) Result {
+	var err error
+	d.model, err = d.r.Get(new(T))
+	if err != nil {
+		return Result{
+			err: err,
+		}
 	}
-	d.args = append(d.args, val)
-	return d
+
+	res := exec(ctx, d.sess, d.core, &QueryContext{
+		Type:    "DELETE",
+		Builder: d,
+		Model:   d.model,
+	})
+
+	var sqlRes sql.Result
+	if res.Result != nil {
+		sqlRes = res.Result.(sql.Result)
+	}
+
+	return Result{
+		err: res.Err,
+		res: sqlRes,
+	}
 }

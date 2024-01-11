@@ -1,6 +1,9 @@
 package orm
 
 import (
+	"context"
+	"database/sql/driver"
+	"errors"
 	"fmt"
 	"testing"
 
@@ -104,6 +107,58 @@ func TestBuild(t *testing.T) {
 				return
 			}
 			assert.Equal(t, tc.wantQuery, res)
+		})
+	}
+}
+
+func TestDeletor_Exec(t *testing.T) {
+	mockDB, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	db, err := OpenDB(mockDB)
+	require.NoError(t, err)
+
+	testCases := []struct {
+		name     string
+		i        *Deletor[TestModel]
+		wantErr  error
+		affected int64
+	}{
+		{
+			name: "db error",
+			i: func() *Deletor[TestModel] {
+				mock.ExpectExec("DELETE FROM .*").WillReturnError(errors.New("db error"))
+
+				return NewDeletor[TestModel](db).Where(C("Id").Eq(1))
+			}(),
+			wantErr: errors.New("db error"),
+		},
+		{
+			name: "query error",
+			i: func() *Deletor[TestModel] {
+				return NewDeletor[TestModel](db).Where(C("XXX").Eq(1))
+			}(),
+			wantErr: errs.NewUnknownField("XXX"),
+		},
+		{
+			name: "exec",
+			i: func() *Deletor[TestModel] {
+				res := driver.RowsAffected(1)
+				mock.ExpectExec("DELETE FROM .*").WillReturnResult(res)
+
+				return NewDeletor[TestModel](db).Where(C("Id").Eq(1))
+			}(),
+			affected: 1,
+		},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			res := tc.i.Exec(context.Background())
+			affected, err := res.RowsAffected()
+			require.Equal(t, err, tc.wantErr)
+			if err != nil {
+				return
+			}
+			assert.Equal(t, affected, tc.affected)
 		})
 	}
 }
