@@ -40,3 +40,7 @@ func NewErrFailedToRollback(bizErr, rbErr error, panicked bool) error {
 func NewUnsupportTable(table any) error {
 	return fmt.Errorf("orm: 不支持的TableReference类型 %v", table)
 }
+
+func NewUnknownUpdateValue() error {
+	return fmt.Errorf("orm: 缺少更新数据")
+}
