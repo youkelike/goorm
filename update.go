@@ -178,7 +178,7 @@ func (d *Updater[T]) Exec(ctx context.Context) Result {
 	}
 
 	res := exec(ctx, d.sess, d.core, &QueryContext{
-		Type:    "DELETE",
+		Type:    "UPDATE",
 		Builder: d,
 		Model:   d.model,
 	})

@@ -107,6 +107,8 @@ func (s Subquery[T]) As(name string) Subquery[T] {
 	}
 }
 
+// 这是个中间对象，完整的 join 语句还有后面的 on，
+// 不要它的话，上面的 Join、LeftJoin、RightJoin 这些方法里就要加上与 on 相关的参数，调用过程不够简洁
 type JoinBuilder struct {
 	left  TableReference
 	right TableReference

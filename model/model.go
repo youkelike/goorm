@@ -58,6 +58,7 @@ func WithColumnName(Field, colname string) ModelOption {
 		if !ok {
 			return errs.NewUnknownField(Field)
 		}
+		// fd 的类型是 *Field，这里改了，m.ColumnMap 和 m.Fields 中都会改
 		fd.ColName = colname
 		return nil
 	}

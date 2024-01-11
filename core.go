@@ -49,6 +49,7 @@ func getHandler[T any](ctx context.Context, sess Session, c core, qc *QueryConte
 		}
 	}
 
+	// 在 join 查询中 select 多个表的字段时，传入的 T 必须是包含了所有 select 中字段的聚合结构体
 	tp := new(T)
 	val := c.creator(c.model, tp)
 	err = val.SetColumns(rows)
