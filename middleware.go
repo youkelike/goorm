@@ -10,6 +10,7 @@ type QueryContext struct {
 	Type    string
 	Builder QueryBuilder
 	Model   *model.Model
+	Sess    Session
 }
 
 type QueryResult struct {

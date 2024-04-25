@@ -4,12 +4,14 @@ import (
 	"bytes"
 
 	"gitee.com/youkelike/orm/internal/errs"
+	"gitee.com/youkelike/orm/model"
 )
 
 type builder struct {
-	// model *model.Model
+	model *model.Model
+	r     model.Registry
 	// dialect Dialect
-	core
+	// core
 
 	sb   bytes.Buffer
 	args []any
@@ -26,7 +28,7 @@ func (b *builder) quote(name string) {
 func (b *builder) buildColumn(c Column) error {
 	switch table := c.table.(type) {
 	case nil:
-		fd, ok := b.core.model.FieldMap[c.name]
+		fd, ok := b.model.FieldMap[c.name]
 		if !ok {
 			return errs.NewUnknownField(c.name)
 		}
@@ -40,7 +42,7 @@ func (b *builder) buildColumn(c Column) error {
 			b.sb.WriteString(c.order)
 		}
 	case Table:
-		m, err := b.core.r.Get(table.entity)
+		m, err := b.r.Get(table.entity)
 		if err != nil {
 			return err
 		}
@@ -76,4 +78,8 @@ func (b *builder) addArgs(vals ...any) error {
 	}
 	b.args = append(b.args, vals...)
 	return nil
+}
+
+func (b *builder) ResetBuffer() {
+	b.sb.Reset()
 }

@@ -11,11 +11,7 @@ import (
 
 // 主要用于集中管理、注册解析好的模型
 type DB struct {
-	// r       model.Registry
-	// creator valuer.Creator
-	// dialect Dialect
 	core
-
 	db *sql.DB
 }
 
@@ -24,8 +20,10 @@ func (db *DB) getCore() core {
 }
 
 func (db *DB) DoTx(ctx context.Context,
+	// 这里的参数必须是 *Tx，不能是 Session 接口，因为必须明确这里是在调用事件下的方法
 	fn func(ctx context.Context, tx *Tx) error,
 	opts *sql.TxOptions) (err error) {
+
 	tx, err := db.BeginTx(ctx, opts)
 	if err != nil {
 		return err
@@ -52,8 +50,8 @@ func (db *DB) BeginTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error) {
 	return &Tx{tx: tx, db: db}, nil
 }
 
+// 事务扩散方案
 // type txKey struct{}
-
 // func (db *DB) BeginTxV2(ctx context.Context, opts *sql.TxOptions) (context.Context, *Tx, error) {
 // 	val := ctx.Value(txKey{})
 // 	tx, ok := val.(*Tx)
@@ -64,6 +62,7 @@ func (db *DB) BeginTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error) {
 // 	if err != nil {
 // 		return nil, nil, err
 // 	}
+// 	ctx = context.WithValue(ctx, txKey{}, tx)
 // 	return ctx, tx, nil
 // }
 

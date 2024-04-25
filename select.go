@@ -39,7 +39,7 @@ func NewSelector[T any](sess Session) *Selector[T] {
 	c := sess.getCore()
 	return &Selector[T]{
 		builder: builder{
-			core:   c,
+			r:      c.r,
 			quoter: c.dialect.quoter(),
 		},
 		sess: sess,
@@ -355,10 +355,11 @@ func (s *Selector[T]) Get(ctx context.Context) (*T, error) {
 		return nil, err
 	}
 
-	res := get[T](ctx, s.sess, s.core, &QueryContext{
+	res := get[T](ctx, &QueryContext{
 		Type:    "SELECT",
 		Builder: s,
 		Model:   s.model,
+		Sess:    s.sess,
 	})
 	if res.Result != nil {
 		return res.Result.(*T), res.Err
@@ -374,10 +375,11 @@ func (s *Selector[T]) GetMulti(ctx context.Context) ([]*T, error) {
 	}
 
 	// 这样改写是为了加入 middleware 功能
-	res := getMulti[T](ctx, s.sess, s.core, &QueryContext{
+	res := getMulti[T](ctx, &QueryContext{
 		Type:    "SELECT",
 		Builder: s,
 		Model:   s.model,
+		Sess:    s.sess,
 	})
 	if res.Result != nil {
 		return res.Result.([]*T), res.Err

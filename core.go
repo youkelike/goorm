@@ -9,24 +9,29 @@ import (
 )
 
 type core struct {
-	model   *model.Model
+	// core 是全局使用的，model 是个性化的，不适合放这
+	// model *model.Model
+
+	// 模型解析
+	r model.Registry
+	// 方言处理
 	dialect Dialect
+	// 结果集映射
 	creator valuer.Creator
-	r       model.Registry
-	mdls    []Middleware
+	// 中间件
+	mdls []Middleware
 }
 
-func get[T any](ctx context.Context, sess Session, c core, qc *QueryContext) *QueryResult {
-	var root Handler = func(ctx context.Context, qc *QueryContext) *QueryResult {
-		return getHandler[T](ctx, sess, c, qc)
-	}
-	for i := len(c.mdls) - 1; i >= 0; i-- {
-		root = c.mdls[i](root)
+// 为了支持泛型，只能用函数，不能做成绑定到对象上的方法
+func get[T any](ctx context.Context, qc *QueryContext) *QueryResult {
+	root := getHandler[T]
+	for i := len(qc.Sess.getCore().mdls) - 1; i >= 0; i-- {
+		root = qc.Sess.getCore().mdls[i](root)
 	}
 	return root(ctx, qc)
 }
 
-func getHandler[T any](ctx context.Context, sess Session, c core, qc *QueryContext) *QueryResult {
+func getHandler[T any](ctx context.Context, qc *QueryContext) *QueryResult {
 	q, err := qc.Builder.Build()
 	if err != nil {
 		return &QueryResult{
@@ -34,9 +39,7 @@ func getHandler[T any](ctx context.Context, sess Session, c core, qc *QueryConte
 		}
 	}
 
-	// db := s.db.db
-	// rows, err := db.QueryContext(ctx, q.SQL, q.Args...)
-	rows, err := sess.queryContext(ctx, q.SQL, q.Args...)
+	rows, err := qc.Sess.queryContext(ctx, q.SQL, q.Args...)
 	if err != nil {
 		return &QueryResult{
 			Err: err,
@@ -51,7 +54,7 @@ func getHandler[T any](ctx context.Context, sess Session, c core, qc *QueryConte
 
 	// 在 join 查询中 select 多个表的字段时，传入的 T 必须是包含了所有 select 中字段的聚合结构体
 	tp := new(T)
-	val := c.creator(c.model, tp)
+	val := qc.Sess.getCore().creator(qc.Model, tp)
 	err = val.SetColumns(rows)
 	return &QueryResult{
 		Err:    err,
@@ -59,17 +62,15 @@ func getHandler[T any](ctx context.Context, sess Session, c core, qc *QueryConte
 	}
 }
 
-func exec(ctx context.Context, sess Session, c core, qc *QueryContext) *QueryResult {
-	var root Handler = func(ctx context.Context, qc *QueryContext) *QueryResult {
-		return execHandler(ctx, sess, c, qc)
-	}
-	for i := len(c.mdls) - 1; i >= 0; i-- {
-		root = c.mdls[i](root)
+func exec(ctx context.Context, qc *QueryContext) *QueryResult {
+	root := execHandler
+	for i := len(qc.Sess.getCore().mdls) - 1; i >= 0; i-- {
+		root = qc.Sess.getCore().mdls[i](root)
 	}
 	return root(ctx, qc)
 }
 
-func execHandler(ctx context.Context, sess Session, c core, qc *QueryContext) *QueryResult {
+func execHandler(ctx context.Context, qc *QueryContext) *QueryResult {
 	q, err := qc.Builder.Build()
 	if err != nil {
 		return &QueryResult{
@@ -77,25 +78,23 @@ func execHandler(ctx context.Context, sess Session, c core, qc *QueryContext) *Q
 		}
 	}
 
-	res, err := sess.execContext(ctx, q.SQL, q.Args...)
+	res, err := qc.Sess.execContext(ctx, q.SQL, q.Args...)
 	return &QueryResult{
 		Err:    err,
 		Result: res,
 	}
 }
 
-func getMulti[T any](ctx context.Context, sess Session, c core, qc *QueryContext) *QueryResult {
+func getMulti[T any](ctx context.Context, qc *QueryContext) *QueryResult {
 	// 把业务逻辑改造成一个 handler
-	var root Handler = func(ctx context.Context, qc *QueryContext) *QueryResult {
-		return getMultiHandler[T](ctx, sess, c, qc)
-	}
-	for i := len(c.mdls) - 1; i >= 0; i-- {
-		root = c.mdls[i](root)
+	root := getMultiHandler[T]
+	for i := len(qc.Sess.getCore().mdls) - 1; i >= 0; i-- {
+		root = qc.Sess.getCore().mdls[i](root)
 	}
 	return root(ctx, qc)
 }
 
-func getMultiHandler[T any](ctx context.Context, sess Session, c core, qc *QueryContext) *QueryResult {
+func getMultiHandler[T any](ctx context.Context, qc *QueryContext) *QueryResult {
 	q, err := qc.Builder.Build()
 	if err != nil {
 		return &QueryResult{
@@ -103,7 +102,7 @@ func getMultiHandler[T any](ctx context.Context, sess Session, c core, qc *Query
 		}
 	}
 
-	rows, err := sess.queryContext(ctx, q.SQL, q.Args...)
+	rows, err := qc.Sess.queryContext(ctx, q.SQL, q.Args...)
 	if err != nil {
 		return &QueryResult{
 			Err: err,
@@ -113,7 +112,7 @@ func getMultiHandler[T any](ctx context.Context, sess Session, c core, qc *Query
 	var tps []*T
 	for rows.Next() {
 		tp := new(T)
-		val := c.creator(c.model, tp)
+		val := qc.Sess.getCore().creator(qc.Model, tp)
 		err = val.SetColumns(rows)
 		tps = append(tps, tp)
 	}

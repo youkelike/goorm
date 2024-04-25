@@ -4,58 +4,38 @@ import (
 	"go/ast"
 )
 
-type SingleFileEntryVisitor struct {
-	file *FileVisitor
-}
-
-func (s *SingleFileEntryVisitor) Get() *File {
-	types := make([]Type, 0, len(s.file.Types))
-	for _, typ := range s.file.Types {
-		types = append(types, Type{
-			Name:   typ.name,
-			Fields: typ.fields,
-		})
-	}
-	return &File{
-		Package: s.file.Package,
-		Imports: s.file.Imports,
-		Types:   types,
-	}
-}
-
-// 要先检查传入的 node 是否是要处理的类型，符合要求再处理
-// 对于返回值，有 3 中情况：
-// 1、返回 nil 结束遍历
-// 2、返回自己，后续会继续遍历 node 的子节点
-// 3、返回一个其他的 visitor，会用它来遍历 node 的子节点
-func (s *SingleFileEntryVisitor) Visit(node ast.Node) ast.Visitor {
-	fn, ok := node.(*ast.File)
-	if !ok {
-		// 意思是没找到，继续在子节点里找
-		return s
-	}
-
-	// 意思是用一个新的 visitor 去遍历子节点
-	s.file = &FileVisitor{
-		Package: fn.Name.String(),
-	}
-	return s.file
-}
-
 type File struct {
 	Package string
 	Imports []string
 	Types   []Type
 }
 
+// 用于拿到 package、import、type 定义
 type FileVisitor struct {
 	Package string
 	Imports []string
 	Types   []*TypeVisitor
 }
 
+func (f *FileVisitor) Get() *File {
+	types := make([]Type, 0, len(f.Types))
+	for _, typ := range f.Types {
+		types = append(types, Type{
+			Name:   typ.name,
+			Fields: typ.fields,
+		})
+	}
+	return &File{
+		Package: f.Package,
+		Imports: f.Imports,
+		Types:   types,
+	}
+}
+
 func (f *FileVisitor) Visit(node ast.Node) ast.Visitor {
 	switch n := node.(type) {
+	case *ast.File:
+		f.Package = n.Name.String()
 	case *ast.ImportSpec:
 		path := n.Path.Value
 		if n.Name != nil && n.Name.String() != "" {
@@ -76,6 +56,7 @@ func (f *FileVisitor) Visit(node ast.Node) ast.Visitor {
 	return f
 }
 
+// 用于拿到结构体定义的字段
 type TypeVisitor struct {
 	name   string
 	fields []Field

@@ -20,7 +20,7 @@ func NewDeletor[T any](sess Session) *Deletor[T] {
 	c := sess.getCore()
 	return &Deletor[T]{
 		builder: builder{
-			core:   c,
+			r:      c.r,
 			quoter: c.dialect.quoter(),
 		},
 		sess: sess,
@@ -132,10 +132,11 @@ func (d *Deletor[T]) Exec(ctx context.Context) Result {
 		}
 	}
 
-	res := exec(ctx, d.sess, d.core, &QueryContext{
+	res := exec(ctx, &QueryContext{
 		Type:    "DELETE",
 		Builder: d,
 		Model:   d.model,
+		Sess:    d.sess,
 	})
 
 	var sqlRes sql.Result

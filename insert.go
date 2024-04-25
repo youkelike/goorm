@@ -47,7 +47,7 @@ func NewInserter[T any](sess Session) *Inserter[T] {
 	c := sess.getCore()
 	return &Inserter[T]{
 		builder: builder{
-			core:   c,
+			r:      c.r,
 			quoter: c.dialect.quoter(),
 		},
 		sess: sess,
@@ -127,7 +127,7 @@ func (i *Inserter[T]) Build() (*Query, error) {
 	}
 
 	if i.upsert != nil {
-		err := i.dialect.buildUpsert(&i.builder, i.upsert)
+		err := i.sess.getCore().dialect.buildUpsert(&i.builder, i.upsert)
 		if err != nil {
 			return nil, err
 		}
@@ -149,10 +149,11 @@ func (i *Inserter[T]) Exec(ctx context.Context) Result {
 		}
 	}
 
-	res := exec(ctx, i.sess, i.core, &QueryContext{
+	res := exec(ctx, &QueryContext{
 		Type:    "INSERT",
 		Builder: i,
 		Model:   i.model,
+		Sess:    i.sess,
 	})
 
 	var sqlRes sql.Result

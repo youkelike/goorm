@@ -27,7 +27,20 @@ func gen(w io.Writer, srcFile string) error {
 	if err != nil {
 		return err
 	}
-	s := &SingleFileEntryVisitor{}
+
+	// 多个遍历器合作
+	s := &FileVisitor{}
+	// 一个遍历器完成所有节点查找
+	// s := &FileEntryVisitor{}
+
+	// Walk 相当于多叉树中的 dfs，还是前序遍历（先 Visit 当前节点），
+	// 首先，会调用 ss := s.Visit(f)，这个调用返回的 ss 也是一个 Visitor，可以是新的，也可以是原来的，
+	// 如果 ss 为空，递归就返回了，
+	// 否则，会用返回的 ss 来 Walk 所有 f 的子节点（f 有各种不同类型，子节点都不一样），类似这样：
+	// for 子节点 in f {
+	//     ast.Walk(ss, 子节点)
+	// }
+	//
 	ast.Walk(s, f)
 	file := s.Get()
 	fmt.Println(file.Package)

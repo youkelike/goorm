@@ -2,22 +2,23 @@ package orm
 
 import (
 	"context"
+	"database/sql"
 )
 
 type RawQuerier[T any] struct {
-	core
+	// *core
 	sess Session
 	sql  string
 	args []any
 }
 
 func RawQuery[T any](sess Session, query string, args ...any) *RawQuerier[T] {
-	c := sess.getCore()
+	// c := sess.getCore()
 	return &RawQuerier[T]{
 		sql:  query,
 		args: args,
 		sess: sess,
-		core: c,
+		// core: &c,
 	}
 }
 
@@ -30,39 +31,43 @@ func (r RawQuerier[T]) Build() (*Query, error) {
 
 func (r RawQuerier[T]) Exec(ctx context.Context) Result {
 	var err error
-	r.model, err = r.r.Get(new(T))
+	model, err := r.sess.getCore().r.Get(new(T))
 	if err != nil {
 		return Result{
 			err: err,
 		}
 	}
 
-	res := exec(ctx, r.sess, r.core, &QueryContext{
+	res := exec(ctx, &QueryContext{
 		Type:    "RAW",
 		Builder: r,
-		Model:   r.model,
+		Model:   model,
+		Sess:    r.sess,
 	})
 
+	var sqlRes sql.Result
 	if res.Result != nil {
-		return res.Result.(Result)
+		sqlRes = res.Result.(sql.Result)
 	}
 
 	return Result{
 		err: res.Err,
+		res: sqlRes,
 	}
 }
 
 func (s RawQuerier[T]) Get(ctx context.Context) (*T, error) {
 	var err error
-	s.model, err = s.r.Get(new(T))
+	model, err := s.sess.getCore().r.Get(new(T))
 	if err != nil {
 		return nil, err
 	}
 
-	res := get[T](ctx, s.sess, s.core, &QueryContext{
+	res := get[T](ctx, &QueryContext{
 		Type:    "RAW",
 		Builder: s,
-		Model:   s.model,
+		Model:   model,
+		Sess:    s.sess,
 	})
 
 	if res.Result != nil {
@@ -73,16 +78,17 @@ func (s RawQuerier[T]) Get(ctx context.Context) (*T, error) {
 
 func (r RawQuerier[T]) GetMulti(ctx context.Context) ([]*T, error) {
 	var err error
-	r.model, err = r.r.Get(new(T))
+	model, err := r.sess.getCore().r.Get(new(T))
 	if err != nil {
 		return nil, err
 	}
 
 	// 这样改写是为了加入 middleware 功能
-	res := getMulti[T](ctx, r.sess, r.core, &QueryContext{
+	res := getMulti[T](ctx, &QueryContext{
 		Type:    "RAW",
 		Builder: r,
-		Model:   r.model,
+		Model:   model,
+		Sess:    r.sess,
 	})
 	if res.Result != nil {
 		return res.Result.([]*T), res.Err

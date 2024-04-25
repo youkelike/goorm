@@ -19,10 +19,9 @@ func TestRawQuerier_Get(t *testing.T) {
 
 	mock.ExpectQuery("SELECT .*").WillReturnError(errs.ErrNoRows)
 
-	rows := sqlmock.NewRows([]string{"id", "first_name", "age", "last_name"})
-	mock.ExpectQuery("SELECT .*").WillReturnRows(rows)
+	mock.ExpectQuery("SELECT .*").WillReturnError(errs.ErrNoRows)
 
-	rows = sqlmock.NewRows([]string{"id", "first_name", "age", "last_name"})
+	rows := sqlmock.NewRows([]string{"id", "first_name", "age", "last_name"})
 	rows.AddRow("1", "Tom", "18", "Jerry")
 	mock.ExpectQuery("SELECT .*").WillReturnRows(rows)
 
