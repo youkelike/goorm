@@ -294,10 +294,10 @@ func TestSelector_Join(t *testing.T) {
 	}
 
 	type OrderDetail struct {
-		OrderId   int
-		ItemId    int
-		UsingCol1 string
-		UsingCol2 string
+		OrderId int
+		ItemId  int
+		Address string
+		Price   int
 	}
 
 	type Item struct {
@@ -425,6 +425,19 @@ func TestSelector_Join(t *testing.T) {
 				SQL: "SELECT * FROM (item AS t4 JOIN (order AS t1 JOIN order_detail AS t2 ON t1.id=t2.order_id) ON t2.item_id=t4.id);",
 			},
 		},
+		{
+			name: "right join with fields select",
+			s: func() QueryBuilder {
+				t1 := TableOf(&Order{}).As("t1")
+				t2 := TableOf(&OrderDetail{}).As("t2")
+				t3 := t1.RightJoin(t2).On(t1.C("Id").Eq(t2.C("OrderId")))
+
+				return NewSelector[Order](db).Select(t1.C("Id"), t2.C("ItemId"), t2.C("Price"), t2.C("Address").As("addr")).From(t3)
+			}(),
+			wantQuery: &Query{
+				SQL: "SELECT t1.id,t2.item_id,t2.price,t2.address AS addr FROM (order AS t1 RIGHT JOIN order_detail AS t2 ON t1.id=t2.order_id);",
+			},
+		},
 	}
 
 	for _, tc := range testCases {
@@ -435,6 +448,127 @@ func TestSelector_Join(t *testing.T) {
 				return
 			}
 			assert.Equal(t, tc.wantQuery, q)
+		})
+	}
+}
+
+func TestSelector_Scan(t *testing.T) {
+	type Order struct {
+		Id        int
+		UserName  string
+		UsingCol1 string
+		UsingCol2 string
+	}
+
+	type OrderDetail struct {
+		OrderId int
+		ItemId  int
+		Address string
+		Price   int
+	}
+
+	type Result struct {
+		Id      int
+		ItemId  int
+		Address string
+		Price   int
+	}
+
+	mockDB, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	db, err := OpenDB(mockDB)
+	require.NoError(t, err)
+
+	rows := sqlmock.NewRows([]string{"id", "item_id", "address"})
+	rows.AddRow(1, 1, "guangzhou")
+	mock.ExpectQuery("SELECT .*").WillReturnRows(rows)
+
+	rows = sqlmock.NewRows([]string{"id", "item_id", "address", "price", "user_name"})
+	rows.AddRow(1, 1, "guangzhou", 100, "alice")
+	mock.ExpectQuery("SELECT .*").WillReturnRows(rows)
+
+	rows = sqlmock.NewRows([]string{"id", "item_id", "address", "price"})
+	rows.AddRow(1, 1, "guangzhou", 100)
+	mock.ExpectQuery("SELECT .*").WillReturnRows(rows)
+
+	testCases := []struct {
+		name    string
+		entity  any
+		s       *Selector[Order]
+		wantErr error
+		wantRes []any
+	}{
+		{
+			name:    "no pointer",
+			entity:  Result{},
+			wantErr: errs.ErrScanEntityValid,
+			wantRes: nil,
+		},
+		{
+			name: "struct fields more than query results",
+			s: func() *Selector[Order] {
+				t1 := TableOf(&Order{}).As("t1")
+				t2 := TableOf(&OrderDetail{}).As("t2")
+				t3 := t1.RightJoin(t2).On(t1.C("Id").Eq(t2.C("OrderId")))
+				return NewSelector[Order](db).
+					Select(t1.C("Id"), t2.C("ItemId"), t2.C("Price")).
+					From(t3)
+			}(),
+			entity:  &Result{},
+			wantErr: nil,
+			wantRes: []any{
+				&Result{
+					Id:      1,
+					ItemId:  1,
+					Address: "guangzhou",
+					Price:   0,
+				},
+			},
+		},
+		{
+			name: "struct fields less than query results",
+			s: func() *Selector[Order] {
+				t1 := TableOf(&Order{}).As("t1")
+				t2 := TableOf(&OrderDetail{}).As("t2")
+				t3 := t1.RightJoin(t2).On(t1.C("Id").Eq(t2.C("OrderId")))
+				return NewSelector[Order](db).
+					Select(t1.C("Id"), t2.C("ItemId"), t2.C("Price"), t2.C("Address"), t1.C("UserName")).
+					From(t3)
+			}(),
+			entity:  &Result{},
+			wantErr: errs.NewUnknownColumn("user_name"),
+		},
+		{
+			name: "default",
+			s: func() *Selector[Order] {
+				t1 := TableOf(&Order{}).As("t1")
+				t2 := TableOf(&OrderDetail{}).As("t2")
+				t3 := t1.RightJoin(t2).On(t1.C("Id").Eq(t2.C("OrderId")))
+				return NewSelector[Order](db).
+					Select(t1.C("Id"), t2.C("ItemId"), t2.C("Price"), t2.C("Address")).
+					From(t3)
+			}(),
+			entity:  &Result{},
+			wantErr: nil,
+			wantRes: []any{
+				&Result{
+					Id:      1,
+					ItemId:  1,
+					Address: "guangzhou",
+					Price:   100,
+				},
+			},
+		},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+
+			res, err := tc.s.Scan(tc.entity)
+			assert.Equal(t, tc.wantErr, err)
+			if err != nil {
+				return
+			}
+			assert.Equal(t, tc.wantRes, res)
 		})
 	}
 }

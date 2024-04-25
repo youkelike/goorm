@@ -11,6 +11,7 @@ var (
 	ErrInsertZeroRow    = errors.New("orm: 插入 0 行")
 	ErrNoGroupUseHaving = errors.New("orm: having 必须配合 group 使用")
 	ErrNoOrderByVerb    = errors.New("orm: order by 必须指定字段排序规则")
+	ErrScanEntityValid  = errors.New("orm: scan 的参数只支持结构体的指针")
 )
 
 func NewUnknownField(name string) error {

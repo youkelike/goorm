@@ -3,6 +3,8 @@ package orm
 import (
 	"context"
 	"database/sql"
+
+	"gitee.com/youkelike/orm/model"
 )
 
 type RawQuerier[T any] struct {
@@ -54,6 +56,14 @@ func (r RawQuerier[T]) Exec(ctx context.Context) Result {
 		err: res.Err,
 		res: sqlRes,
 	}
+}
+
+func (s RawQuerier[T]) GetTpAndModel() (any, *model.Model, error) {
+	model, err := s.sess.getCore().r.Get(new(T))
+	if err != nil {
+		return nil, nil, err
+	}
+	return new(T), model, nil
 }
 
 func (s RawQuerier[T]) Get(ctx context.Context) (*T, error) {

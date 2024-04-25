@@ -79,7 +79,3 @@ func (b *builder) addArgs(vals ...any) error {
 	b.args = append(b.args, vals...)
 	return nil
 }
-
-func (b *builder) ResetBuffer() {
-	b.sb.Reset()
-}

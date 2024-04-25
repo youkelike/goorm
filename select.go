@@ -2,6 +2,7 @@ package orm
 
 import (
 	"context"
+	"reflect"
 	"strconv"
 	"strings"
 
@@ -33,6 +34,8 @@ type Selector[T any] struct {
 	offset int
 	// limit 子句
 	limit int
+
+	joinScanObj any
 }
 
 func NewSelector[T any](sess Session) *Selector[T] {
@@ -346,6 +349,37 @@ func (s *Selector[T]) Limit(val int) *Selector[T] {
 func (s *Selector[T]) Offset(val int) *Selector[T] {
 	s.offset = val
 	return s
+}
+
+// join 查询的结果处理
+func (s *Selector[T]) Scan(entity any) (ret []any, err error) {
+	typ := reflect.TypeOf(entity)
+	if typ.Kind() != reflect.Pointer || typ.Elem().Kind() != reflect.Struct {
+		return nil, errs.ErrScanEntityValid
+	}
+
+	model, err := s.r.Get(entity)
+	if err != nil {
+		return nil, err
+	}
+
+	q, err := s.Build()
+	if err != nil {
+		return nil, err
+	}
+
+	rows, err := s.sess.queryContext(context.Background(), q.SQL, q.Args...)
+	if err != nil {
+		return nil, err
+	}
+
+	for rows.Next() {
+		val := s.sess.getCore().creator(model, entity)
+		err = val.SetColumns(rows)
+		ret = append(ret, entity)
+	}
+
+	return ret, err
 }
 
 func (s *Selector[T]) Get(ctx context.Context) (*T, error) {
