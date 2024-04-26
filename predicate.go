@@ -48,12 +48,19 @@ func (left Predicate) Or(right Predicate) Predicate {
 	}
 }
 
-func (p Predicate) expr() {
-
-}
+func (p Predicate) expr() {}
 
 type value struct {
 	val any
+}
+
+func valueOf(arg any) Expression {
+	switch val := arg.(type) {
+	case Expression:
+		return val
+	default:
+		return value{val: val}
+	}
 }
 
 func (value) expr() {}

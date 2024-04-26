@@ -58,15 +58,6 @@ func (c Column) Lt(arg any) Predicate {
 	}
 }
 
-func valueOf(arg any) Expression {
-	switch val := arg.(type) {
-	case Expression:
-		return val
-	default:
-		return value{val: val}
-	}
-}
-
 func (c Column) expr() {}
 
 func (c Column) selectable() {}

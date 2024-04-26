@@ -22,7 +22,8 @@ type Selector[T any] struct {
 	// from 子句
 	table TableReference
 	// where 子句
-	// where 的数据类型只能是 Predicate，不能是 Expression，因为 Column、Value 都不能直接放到 where 中
+	// where 的数据类型只能是 Predicate，不能是 Expression，因为 Column、Value 都不能直接放到 where 中，
+	// 而且还要处理多个 Predicate 之间的组合问题，也就是多个 where 条件的组合，
 	where []Predicate
 	// group 子句
 	groupBy []Column
@@ -34,8 +35,6 @@ type Selector[T any] struct {
 	offset int
 	// limit 子句
 	limit int
-
-	joinScanObj any
 }
 
 func NewSelector[T any](sess Session) *Selector[T] {
@@ -84,7 +83,7 @@ func (s *Selector[T]) Build() (*Query, error) {
 			p = p.And(s.where[i])
 		}
 		// 遍历链表
-		if err := s.buildExpresssion(p); err != nil {
+		if err := s.buildPredicate(p); err != nil {
 			return nil, err
 		}
 	}
@@ -113,7 +112,7 @@ func (s *Selector[T]) Build() (*Query, error) {
 			p = p.And(s.having[i])
 		}
 		// 遍历链表
-		if err := s.buildExpresssion(p); err != nil {
+		if err := s.buildPredicate(p); err != nil {
 			return nil, err
 		}
 	}
@@ -201,7 +200,7 @@ func (s *Selector[T]) buildTable(table TableReference) error {
 			for i := 1; i < len(t.on); i++ {
 				p = p.And(t.on[i])
 			}
-			if err := s.buildExpresssion(p); err != nil {
+			if err := s.buildPredicate(p); err != nil {
 				return err
 			}
 		}
@@ -220,59 +219,6 @@ func (s *Selector[T]) buildTable(table TableReference) error {
 		s.sb.WriteString(t.as)
 	default:
 		return errs.NewUnsupportTable(table)
-	}
-	return nil
-}
-
-func (s *Selector[T]) buildExpresssion(expr Expression) error {
-	switch p := expr.(type) {
-	case nil:
-	case Predicate:
-		_, ok := p.left.(Predicate)
-		if ok {
-			s.sb.WriteString("(")
-		}
-		if err := s.buildExpresssion(p.left); err != nil {
-			return err
-		}
-		if ok {
-			s.sb.WriteString(")")
-		}
-
-		if p.op == opNot || p.op == opAnd || p.op == opOr {
-			s.sb.WriteString(" ")
-		}
-		s.sb.WriteString(p.op.String())
-		if p.op == opNot || p.op == opAnd || p.op == opOr {
-			s.sb.WriteString(" ")
-		}
-
-		_, ok = p.right.(Predicate)
-		if ok {
-			s.sb.WriteString("(")
-		}
-		if err := s.buildExpresssion(p.right); err != nil {
-			return err
-		}
-		if ok {
-			s.sb.WriteString(")")
-		}
-	case Column:
-		p.alias = ""
-		err := s.buildColumn(p)
-		if err != nil {
-			return err
-		}
-	case value:
-		s.sb.WriteString("?")
-		s.addArgs(p.val)
-	case RawExpr:
-		s.sb.WriteString("(")
-		s.sb.WriteString(p.raw)
-		s.sb.WriteString(")")
-		s.addArgs(p.args...)
-	default:
-		return errs.NewUnsupportExpression(expr)
 	}
 	return nil
 }

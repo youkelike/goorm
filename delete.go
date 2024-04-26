@@ -3,8 +3,6 @@ package orm
 import (
 	"context"
 	"database/sql"
-
-	"gitee.com/youkelike/orm/internal/errs"
 )
 
 type Deletor[T any] struct {
@@ -28,10 +26,12 @@ func NewDeletor[T any](sess Session) *Deletor[T] {
 }
 
 func (d *Deletor[T]) Build() (*Query, error) {
-	var err error
-	d.model, err = d.r.Register(new(T))
-	if err != nil {
-		return nil, err
+	if d.model == nil {
+		var err error
+		d.model, err = d.r.Get(new(T))
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	d.sb.WriteString("DELETE FROM ")
@@ -48,7 +48,7 @@ func (d *Deletor[T]) Build() (*Query, error) {
 			p = p.And(d.where[i])
 		}
 
-		if err := d.buildExpression(p); err != nil {
+		if err := d.buildPredicate(p); err != nil {
 			return nil, err
 		}
 	}
@@ -58,59 +58,6 @@ func (d *Deletor[T]) Build() (*Query, error) {
 		SQL:  d.sb.String(),
 		Args: d.args,
 	}, nil
-}
-
-func (d *Deletor[T]) buildExpression(expr Expression) error {
-	switch p := expr.(type) {
-	case nil:
-	case Predicate:
-		_, ok := p.left.(Predicate)
-		if ok {
-			d.sb.WriteString("(")
-		}
-		if err := d.buildExpression(p.left); err != nil {
-			return err
-		}
-		if ok {
-			d.sb.WriteString(")")
-		}
-
-		if p.op == opNot || p.op == opAnd || p.op == opOr {
-			d.sb.WriteString(" ")
-		}
-		d.sb.WriteString(p.op.String())
-		if p.op == opNot || p.op == opAnd || p.op == opOr {
-			d.sb.WriteString(" ")
-		}
-
-		_, ok = p.right.(Predicate)
-		if ok {
-			d.sb.WriteString("(")
-		}
-		if err := d.buildExpression(p.right); err != nil {
-			return err
-		}
-		if ok {
-			d.sb.WriteString(")")
-		}
-	case Column:
-		p.alias = ""
-		err := d.buildColumn(p)
-		if err != nil {
-			return err
-		}
-	case value:
-		d.sb.WriteString("?")
-		d.addArgs(p.val)
-	case RawExpr:
-		d.sb.WriteString("(")
-		d.sb.WriteString(p.raw)
-		d.sb.WriteString(")")
-		d.addArgs(p.args...)
-	default:
-		return errs.NewUnsupportExpression(expr)
-	}
-	return nil
 }
 
 func (d *Deletor[T]) From(table string) *Deletor[T] {

@@ -54,6 +54,11 @@ func NewInserter[T any](sess Session) *Inserter[T] {
 	}
 }
 
+// 这个功能有两个变长参数；conflictColumns 和 upsert，而一个方法中只能出现一个变长参数，所以这里做成了两个方法，
+// 当然也可以不用变长参数，直接用切片做参数，但这里还有一个方言兼容问题，
+// mysql 不需要 ConflictColumns 方法， sqlLite 需要，
+// 综合考虑下就做成了这样，用一个新的对象来组织这两个参数，并通过一个 builder 对象来管理这两个参数的 setter 方法，而不是直接加到 Inserter 上，
+// 这样做更优雅，
 func (i *Inserter[T]) Upsert() *UpsertBuilder[T] {
 	return &UpsertBuilder[T]{
 		i: i,

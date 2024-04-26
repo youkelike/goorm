@@ -72,6 +72,72 @@ func (b *builder) buildColumn(c Column) error {
 	return nil
 }
 
+func (b *builder) buildPredicate(p Predicate) error {
+	left, ok := p.left.(Predicate)
+	if ok {
+		b.sb.WriteString("(")
+		err := b.buildPredicate(left)
+		if err != nil {
+			return err
+		}
+		b.sb.WriteString(")")
+	} else {
+		err := b.buildExpresssion(p.left)
+		if err != nil {
+			return err
+		}
+	}
+
+	if p.op == opNot || p.op == opAnd || p.op == opOr {
+		b.sb.WriteString(" ")
+	}
+	b.sb.WriteString(p.op.String())
+	if p.op == opNot || p.op == opAnd || p.op == opOr {
+		b.sb.WriteString(" ")
+	}
+
+	right, ok := p.right.(Predicate)
+	if ok {
+		b.sb.WriteString("(")
+		err := b.buildPredicate(right)
+		if err != nil {
+			return err
+		}
+		b.sb.WriteString(")")
+	} else {
+		err := b.buildExpresssion(p.right)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (b *builder) buildExpresssion(expr Expression) error {
+	switch p := expr.(type) {
+	case nil:
+	// case Predicate:
+	// 	return s.buildPredicate(p)
+	case Column:
+		p.alias = ""
+		err := b.buildColumn(p)
+		if err != nil {
+			return err
+		}
+	case value:
+		b.sb.WriteString("?")
+		b.addArgs(p.val)
+	case RawExpr:
+		b.sb.WriteString("(")
+		b.sb.WriteString(p.raw)
+		b.sb.WriteString(")")
+		b.addArgs(p.args...)
+	default:
+		return errs.NewUnsupportExpression(expr)
+	}
+	return nil
+}
+
 func (b *builder) addArgs(vals ...any) error {
 	if len(vals) == 0 {
 		return nil
