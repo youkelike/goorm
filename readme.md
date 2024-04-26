@@ -26,3 +26,72 @@
 # AOP 支持
     通过 AOP 实现对 log、trace、Prometheus、慢查询、sql 语句审查等中间件的支持
 
+# 使用示例
+### 获取 db 对象
+```go
+db, err := Open("sqlite3", "file:test.db?cache=shared&mode=memory", opts...)
+```
+
+### 查询
+```go
+NewSelector[TestModel](db).Where(C("Id").Eq(1)).Get()
+NewSelector[TestModel](db).Where(C("Age").Eq(18).And(C("FirstName").Eq("Tom"))).Get()
+NewSelector[TestModel](db).Where(C("Age").Eq(18).Or(C("FirstName").Eq("Tom"))).Get()
+NewSelector[TestModel](db).Where(C("Age").Eq(18).Or(C("FirstName").Eq("Tom"))).GroupBy(C("Age")).OrderBy(C("Age").Asc()).Offset(10).Limit(10).GetMulti()
+
+使用聚合函数
+NewSelector[TestModel](db).Select(Sum(C("Age")), Count(C("FirstName"))).Get()
+NewSelector[TestModel](db).Select(Sum(TableOf(new(TestModel)).As("t").C("Age"))).Get()
+
+使用原生 sql 片段
+NewSelector[TestModel](db).Select(Raw("COUNT(DISTINCT first_name)")).Get()
+NewSelector[TestModel](db).Where(Raw("age>?", 18).AsPredicate()).Get()
+NewSelector[TestModel](db).Where(C("Id").Eq(Raw("age+?", 1))).Get()
+
+JOIN 查询
+t1 := TableOf(&Order{}).As("t1")
+t2 := TableOf(&OrderDetail{}).As("t2")
+t3 := t1.RightJoin(t2).On(t1.C("Id").Eq(t2.C("OrderId")))
+NewSelector[Order](db).
+  Select(t1.C("Id"), t2.C("ItemId"), t2.C("Price"), t2.C("Address")).
+  From(t3).Scan(&Result{})
+```
+### 插入
+```go
+简单插入记录
+NewInserter[TestModel](db).Values(&TestModel{}).Exec()
+NewInserter[TestModel](db).Columns("Id", "FirstName").Values(&TestModel{
+	Id:        1,
+	FirstName: "Tom",
+}, &TestModel{
+	Id:        2,
+	FirstName: "Tom2",
+}).Exec()
+
+使用 upsert
+NewInserter[TestModel](db).Values(&TestModel{
+	Id:        1,
+	FirstName: "Tom",
+	Age:       18,
+	LastName:  &sql.NullString{Valid: true, String: "Jerry"},
+}).Upsert().Update(Assign("Age", 10), Assign("FirstName", "Bob")).Exec()
+```
+### 更新
+```go
+NewUpdater[TestModel](db).Value(tm)
+指定更新条件
+NewUpdater[TestModel](db).Value(tm).Where(C("FirstName").Eq("Tom")).Exec()
+指定更新列
+NewUpdater[TestModel](db).Value(tm).Updates(C("Age"), C("FirstName")).Where(C("FirstName").Eq("Tom")).Exec()
+```
+### 删除
+```go
+
+NewDeletor[TestModel](db).Where(C("FirstName").Eq("Tom")).Exec()
+NewDeletor[TestModel](db).Where(C("FirstName").Eq("Tom").And(C("Age").Eq(18))).Exec()
+NewDeletor[TestModel](db).From("test_db.test_model").Where(C("FirstName").Eq("Tom").And(C("Age").Eq(18))).Exec()
+```
+### 原生查询
+```go
+RawQuery[TestModel](db, "SELECT * FROM test_model WHERE id = ?", -1).Get()
+```

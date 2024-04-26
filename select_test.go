@@ -75,6 +75,38 @@ func TestSelect_Build(t *testing.T) {
 			},
 		},
 		{
+			name:    "group by",
+			builder: NewSelector[TestModel](db).Where(C("Age").Eq(18).Or(C("FirstName").Eq("Tom"))).GroupBy(C("Age")),
+			wantQuery: &Query{
+				SQL:  "SELECT * FROM test_model WHERE (age=?) OR (first_name=?) GROUP BY age;",
+				Args: []any{18, "Tom"},
+			},
+		},
+		{
+			name:    "order by",
+			builder: NewSelector[TestModel](db).Where(C("Age").Eq(18).Or(C("FirstName").Eq("Tom"))).OrderBy(C("Age").Asc()),
+			wantQuery: &Query{
+				SQL:  "SELECT * FROM test_model WHERE (age=?) OR (first_name=?) ORDER BY age ASC;",
+				Args: []any{18, "Tom"},
+			},
+		},
+		{
+			name:    "offset and limit",
+			builder: NewSelector[TestModel](db).Where(C("Age").Eq(18).Or(C("FirstName").Eq("Tom"))).Offset(10).Limit(10),
+			wantQuery: &Query{
+				SQL:  "SELECT * FROM test_model WHERE (age=?) OR (first_name=?) OFFSET 10, LIMIT 10;",
+				Args: []any{18, "Tom"},
+			},
+		},
+		{
+			name:    "all",
+			builder: NewSelector[TestModel](db).Where(C("Age").Eq(18).Or(C("FirstName").Eq("Tom"))).GroupBy(C("Age")).OrderBy(C("Age").Asc()).Offset(10).Limit(10),
+			wantQuery: &Query{
+				SQL:  "SELECT * FROM test_model WHERE (age=?) OR (first_name=?) GROUP BY age ORDER BY age ASC OFFSET 10, LIMIT 10;",
+				Args: []any{18, "Tom"},
+			},
+		},
+		{
 			name:    "invalid column",
 			builder: NewSelector[TestModel](db).Where(C("Age").Eq(18).Or(C("XXX").Eq("Tom"))),
 			wantErr: errs.NewUnknownField("XXX"),
