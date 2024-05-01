@@ -166,7 +166,6 @@ func (s *Selector[T]) buildTable(table TableReference) error {
 		if t.alias != "" {
 			s.sb.WriteString(" AS ")
 			s.sb.WriteString(t.alias)
-
 		}
 	case Join:
 		s.sb.WriteString("(")
