@@ -484,6 +484,8 @@ func TestSelector_Join(t *testing.T) {
 	}
 }
 
+// join 结果解析方式一：
+// 正常构造 sql，但最后用 Scan 方法来解析结果，它脱离了内置的中间件流程
 func TestSelector_Scan(t *testing.T) {
 	type Order struct {
 		Id        int
@@ -596,6 +598,123 @@ func TestSelector_Scan(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 
 			res, err := tc.s.Scan(tc.entity)
+			assert.Equal(t, tc.wantErr, err)
+			if err != nil {
+				return
+			}
+			assert.Equal(t, tc.wantRes, res)
+		})
+	}
+}
+
+// join 结果解析方式二：
+// 给最开始的 T 传 Result，要求构造 sql 的过程中所有出现列的地方都要带上表名
+func TestSelectorJoin_GetMulti(t *testing.T) {
+	type Order struct {
+		Id        int
+		UserName  string
+		UsingCol1 string
+		UsingCol2 string
+	}
+
+	type OrderDetail struct {
+		OrderId int
+		ItemId  int
+		Address string
+		Price   int
+	}
+
+	type Result struct {
+		Id      int
+		ItemId  int
+		Address string
+		Price   int
+	}
+
+	mockDB, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	db, err := OpenDB(mockDB)
+	require.NoError(t, err)
+
+	rows := sqlmock.NewRows([]string{"id", "item_id", "address"})
+	rows.AddRow(1, 1, "guangzhou")
+	mock.ExpectQuery("SELECT .*").WillReturnRows(rows)
+
+	rows = sqlmock.NewRows([]string{"id", "item_id", "address", "price", "user_name"})
+	rows.AddRow(1, 1, "guangzhou", 100, "alice")
+	mock.ExpectQuery("SELECT .*").WillReturnRows(rows)
+
+	rows = sqlmock.NewRows([]string{"id", "item_id", "address", "price"})
+	rows.AddRow(1, 1, "guangzhou", 100)
+	mock.ExpectQuery("SELECT .*").WillReturnRows(rows)
+
+	testCases := []struct {
+		name    string
+		entity  any
+		s       *Selector[Result]
+		wantErr error
+		wantRes []*Result
+	}{
+		{
+			name: "struct fields more than query results",
+			s: func() *Selector[Result] {
+				t1 := TableOf(&Order{}).As("t1")
+				t2 := TableOf(&OrderDetail{}).As("t2")
+				t3 := t1.RightJoin(t2).On(t1.C("Id").Eq(t2.C("OrderId")))
+				return NewSelector[Result](db).
+					Select(t1.C("Id"), t2.C("ItemId"), t2.C("Price")).
+					From(t3)
+			}(),
+			entity:  &Result{},
+			wantErr: nil,
+			wantRes: []*Result{
+				&Result{
+					Id:      1,
+					ItemId:  1,
+					Address: "guangzhou",
+					Price:   0,
+				},
+			},
+		},
+		{
+			name: "struct fields less than query results",
+			s: func() *Selector[Result] {
+				t1 := TableOf(&Order{}).As("t1")
+				t2 := TableOf(&OrderDetail{}).As("t2")
+				t3 := t1.RightJoin(t2).On(t1.C("Id").Eq(t2.C("OrderId")))
+				return NewSelector[Result](db).
+					Select(t1.C("Id"), t2.C("ItemId"), t2.C("Price"), t2.C("Address"), t1.C("UserName")).
+					From(t3)
+			}(),
+			entity:  &Result{},
+			wantErr: errs.NewUnknownColumn("user_name"),
+		},
+		{
+			name: "default",
+			s: func() *Selector[Result] {
+				t1 := TableOf(&Order{}).As("t1")
+				t2 := TableOf(&OrderDetail{}).As("t2")
+				t3 := t1.RightJoin(t2).On(t1.C("Id").Eq(t2.C("OrderId")))
+				return NewSelector[Result](db).
+					Select(t1.C("Id"), t2.C("ItemId"), t2.C("Price"), t2.C("Address")).
+					From(t3).Where(t1.C("Id").Gt(100))
+			}(),
+			entity:  &Result{},
+			wantErr: nil,
+			wantRes: []*Result{
+				&Result{
+					Id:      1,
+					ItemId:  1,
+					Address: "guangzhou",
+					Price:   100,
+				},
+			},
+		},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+
+			res, err := tc.s.GetMulti(context.Background())
 			assert.Equal(t, tc.wantErr, err)
 			if err != nil {
 				return
