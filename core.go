@@ -45,6 +45,7 @@ func getHandler[T any](ctx context.Context, qc *QueryContext) *QueryResult {
 			Err: err,
 		}
 	}
+	defer rows.Close()
 
 	if !rows.Next() {
 		return &QueryResult{
@@ -108,6 +109,7 @@ func getMultiHandler[T any](ctx context.Context, qc *QueryContext) *QueryResult 
 			Err: err,
 		}
 	}
+	defer rows.Close()
 
 	var tps []*T
 	for rows.Next() {
