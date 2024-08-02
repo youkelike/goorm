@@ -128,4 +128,5 @@ NewDeletor[TestModel](db).
 ### 原生查询
 ```go
 RawQuery[TestModel](db, "SELECT * FROM test_model WHERE id = ?", -1).Get()
+
 ```
