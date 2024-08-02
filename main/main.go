@@ -18,5 +18,5 @@ type OuterStruct struct {
 
 func main() {
 	fmt.Println(unsafe.Sizeof(EmbeddedStruct{})) // 估计EmbeddedStruct的大小
-	fmt.Println(unsafe.Sizeof(OuterStruct{}))    // 估计OuterStruct的大小
+	// fmt.Println(unsafe.Sizeof(OuterStruct{}))    // 估计OuterStruct的大小
 }
