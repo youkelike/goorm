@@ -7,16 +7,17 @@ import (
 	"go/parser"
 	"go/token"
 	"io"
+	"os"
 	"text/template"
 )
 
-// func main() {
-// 	f, err := os.OpenFile("testdata/user.gen.go")
-// 	if err != nil {
-// 		panic(err)
-// 	}
-// 	gen(f, "testdata/user.go")
-// }
+func main() {
+	f, err := os.Open("testdata/user.gen.go")
+	if err != nil {
+		panic(err)
+	}
+	gen(f, "testdata/user.go")
+}
 
 //go:embed tpl.gohtml
 var genOrm string
